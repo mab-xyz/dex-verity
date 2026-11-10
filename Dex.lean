@@ -5,3 +5,4 @@ import Dex.PoolProofs
 import Dex.SwapProofs
 import Dex.RouterProofs
 import Dex.Factory
+import Dex.FactoryProofs

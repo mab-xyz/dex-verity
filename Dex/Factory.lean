@@ -56,6 +56,8 @@ verity_contract Factory where
     require (t0 != zeroAddress) "Factory: ZERO_ADDRESS"
     let existing ← getMapping2 pools t0 t1
     require (existing == 0) "Factory: POOL_EXISTS"
+    -- Read before any external call, so the new index is the pre-call count.
+    let n ← getStorage poolCount
     unsafe "abi.encode(token0, token1) in scratch memory, for the CREATE2 salt" do
       mstore 0 (addressToWord t0)
       mstore 32 (addressToWord t1)
@@ -76,12 +78,11 @@ verity_contract Factory where
     require (poolWord != 0) "Factory: CREATE2_FAILED"
     ecmDo (Compiler.Modules.Calls.noReturnModule selInitPool 2 false)
       [poolWord, addressToWord t0, addressToWord t1]
+    emit "PoolCreated" [t0, t1, wordToAddress poolWord, n]
     setMapping2 pools t0 t1 poolWord
     setMapping2 pools t1 t0 poolWord
-    let n ← getStorage poolCount
     setMappingUint allPools n poolWord
     setStorage poolCount (add n 1)
-    emit "PoolCreated" [t0, t1, wordToAddress poolWord, n]
     return wordToAddress poolWord
 
 end Dex
