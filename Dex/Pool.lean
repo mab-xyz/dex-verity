@@ -205,11 +205,11 @@ verity_contract Pool where
     let adj0 := sub (mul b0 1000) (mul in0 3)
     let adj1 := sub (mul b1 1000) (mul in1 3)
     require (mul adj0 adj1 >= mul (mul r0 r1) 1000000) "Pool: K"
-    setStorage reserve0 b0
-    setStorage reserve1 b1
     let sender ← msgSender
     emit "Swap" [sender, in0, in1, out0, out1, recipient]
     emit "Sync" [b0, b1]
+    setStorage reserve0 b0
+    setStorage reserve1 b1
 
   function nonreentrant(lock) swap (out0 : Uint256, out1 : Uint256, recipient : Address) : Unit := do
     require (out0 > 0 || out1 > 0) "Pool: INSUFFICIENT_OUTPUT_AMOUNT"
