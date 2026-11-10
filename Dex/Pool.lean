@@ -3,7 +3,7 @@ import Contracts.Common
 namespace Dex
 
 open Contracts
-open Verity hiding pure bind contractAddress
+open Verity hiding pure bind contractAddress blockTimestamp
 open Verity.EVM.Uint256
 open Verity.Stdlib.Math
 
