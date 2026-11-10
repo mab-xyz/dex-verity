@@ -149,11 +149,11 @@ verity_contract Pool where
     setStorage totalSupply (add supplyNow liquidity)
     let toBal ← getMapping balances recipient
     setMapping balances recipient (add toBal liquidity)
-    setStorage reserve0 b0
-    setStorage reserve1 b1
     let sender ← msgSender
     emit "Mint" [sender, a0, a1, liquidity]
     emit "Sync" [b0, b1]
+    setStorage reserve0 b0
+    setStorage reserve1 b1
     return liquidity
 
   function nonreentrant(lock) burn (recipient : Address) : Tuple [Uint256, Uint256] := do
@@ -178,11 +178,11 @@ verity_contract Pool where
     -- Every reserve write keeps the 2^112 cap the swap k-check relies on.
     require (nb0 < 5192296858534827628530496329220096) "Pool: OVERFLOW"
     require (nb1 < 5192296858534827628530496329220096) "Pool: OVERFLOW"
-    setStorage reserve0 nb0
-    setStorage reserve1 nb1
     let sender ← msgSender
     emit "Burn" [sender, amount0, amount1, recipient]
     emit "Sync" [nb0, nb1]
+    setStorage reserve0 nb0
+    setStorage reserve1 nb1
     return (amount0, amount1)
 
   -- The part of `swap` after the payouts: measure what arrived, enforce the fee-adjusted

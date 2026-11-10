@@ -193,6 +193,110 @@ theorem sync_preserves_reserve_cap (s s' : ContractState)
     · simp at h
   · simp at h
 
+/-- Reserve-cap invariant for `mint`: after a successful mint both reserves are below
+2^112, on the first-deposit path and on later deposits alike. -/
+theorem mint_preserves_reserve_cap (recipient : Address) (s s' : ContractState)
+    (v : Uint256) (h : Pool.mint recipient s = .success v s') :
+    (s'.storage 3).val < 2 ^ 112 ∧ (s'.storage 4).val < 2 ^ 112 := by
+  unfold Pool.mint Verity.Core.NonReentrantGuard.guarded at h
+  split at h
+  · split at h
+    · rename_i a s'' hbody
+      injection h with _ hs'
+      subst hs'
+      replace hbody := Contract.eq_of_run_success hbody
+      simp only [Bind.bind] at hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨b0, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨b1, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨hb0, -⟩ := require_success hq
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨hb1, -⟩ := require_success hq
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      have hcap : (5192296858534827628530496329220096 : Uint256).val = 2 ^ 112 := rfl
+      have hb0' : b0.val < 2 ^ 112 := by
+        have := of_decide_eq_true hb0; rw [← hcap]; exact this
+      have hb1' : b1.val < 2 ^ 112 := by
+        have := of_decide_eq_true hb1; rw [← hcap]; exact this
+      have hstor : ∀ (x : ContractState) n,
+          (Verity.Core.NonReentrantGuard.setLock 9 0 x).storage n = x.storage n := fun _ _ => rfl
+      rw [hstor, hstor]
+      -- both branches end in the shared tail, whose last two steps write b0, b1
+      split at hbody
+      · iterate 5 (obtain ⟨_, _, -, hbody⟩ := bind_success hbody)
+        iterate 8 (obtain ⟨_, _, -, hbody⟩ := bind_success hbody)
+        obtain ⟨_, _, hw0, hbody⟩ := bind_success hbody
+        obtain ⟨_, _, hw1, hbody⟩ := bind_success hbody
+        simp only [setStorage, Pool.reserve0, Pool.reserve1, Verity.pure, Pure.pure] at hw0 hw1 hbody
+        injection hw0 with _ hw0
+        injection hw1 with _ hw1
+        injection hbody with _ hbody
+        subst hw0 hw1 hbody
+        simp only [ContractState.storage, ContractState.writeSlot]
+        exact ⟨by simpa using hb0', by simpa using hb1'⟩
+      · iterate 1 (obtain ⟨_, _, -, hbody⟩ := bind_success hbody)
+        iterate 8 (obtain ⟨_, _, -, hbody⟩ := bind_success hbody)
+        obtain ⟨_, _, hw0, hbody⟩ := bind_success hbody
+        obtain ⟨_, _, hw1, hbody⟩ := bind_success hbody
+        simp only [setStorage, Pool.reserve0, Pool.reserve1, Verity.pure, Pure.pure] at hw0 hw1 hbody
+        injection hw0 with _ hw0
+        injection hw1 with _ hw1
+        injection hbody with _ hbody
+        subst hw0 hw1 hbody
+        simp only [ContractState.storage, ContractState.writeSlot]
+        exact ⟨by simpa using hb0', by simpa using hb1'⟩
+    · simp at h
+  · simp at h
+
+/-- Reserve-cap invariant for `burn`: after a successful burn both reserves are below 2^112,
+whatever the tokens report after the payouts. -/
+theorem burn_preserves_reserve_cap (ctx : ExecutableCallContext) (recipient : Address)
+    (s s' : ContractState) (v : Uint256 × Uint256)
+    (h : Pool.burn ctx recipient s = .success v s') :
+    (s'.storage 3).val < 2 ^ 112 ∧ (s'.storage 4).val < 2 ^ 112 := by
+  unfold Pool.burn Verity.Core.NonReentrantGuard.guarded at h
+  split at h
+  · split at h
+    · rename_i a s'' hbody
+      injection h with _ hs'
+      subst hs'
+      replace hbody := Contract.eq_of_run_success hbody
+      simp only [Bind.bind] at hbody
+      iterate 14 (obtain ⟨_, _, -, hbody⟩ := bind_success hbody)
+      obtain ⟨b0, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨b1, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨hb0, -⟩ := require_success hq
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨hb1, -⟩ := require_success hq
+      iterate 3 (obtain ⟨_, _, -, hbody⟩ := bind_success hbody)
+      obtain ⟨_, _, hw0, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, hw1, hbody⟩ := bind_success hbody
+      simp only [setStorage, Pool.reserve0, Pool.reserve1, Verity.pure, Pure.pure] at hw0 hw1 hbody
+      injection hw0 with _ hw0
+      injection hw1 with _ hw1
+      injection hbody with _ hbody
+      subst hw0 hw1 hbody
+      have hcap : (5192296858534827628530496329220096 : Uint256).val = 2 ^ 112 := rfl
+      have hb0' : b0.val < 2 ^ 112 := by
+        have := of_decide_eq_true hb0; rw [← hcap]; exact this
+      have hb1' : b1.val < 2 ^ 112 := by
+        have := of_decide_eq_true hb1; rw [← hcap]; exact this
+      have hstor : ∀ (x : ContractState) n,
+          (Verity.Core.NonReentrantGuard.setLock 9 0 x).storage n = x.storage n := fun _ _ => rfl
+      rw [hstor, hstor]
+      simp only [ContractState.storage, ContractState.writeSlot]
+      exact ⟨by simpa using hb0', by simpa using hb1'⟩
+    · simp at h
+  · simp at h
+
 end Dex.ProofKit
 
 open Dex.ProofKit in
