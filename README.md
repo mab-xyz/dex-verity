@@ -10,7 +10,7 @@ and the EVM bytecode the Verity compiler produces is tested with Foundry.
 |---|---|---|
 | `Pool` | `Dex/Pool.lean` | One token pair: reserves, LP shares (internal ledger), `mint`/`burn`/`swap`/`sync`. Callers transfer tokens in first; the pool measures what arrived (balance-delta accounting). 0.3% fee. Balances are capped below 2^112. |
 | `Router` | `Dex/Router.lean` | User entry points: `addLiquidity`, `removeLiquidity`, `swapExactIn`, with deadlines and slippage bounds; pure `getAmountOut`/`quote`. |
-| `Factory` | `Dex/Factory.lean` | One pool per pair, deployed with CREATE2 from hash-checked creation code; registry `getPool`/`allPools`. (in progress) |
+| `Factory` | `Dex/Factory.lean` | One pool per pair, deployed with CREATE2 (salt `keccak256(abi.encode(token0, token1))`) from creation code that must hash to `poolCodeHash`; registry `getPool` (both orders), `allPoolsLength`, `poolAt`. |
 
 Names forced by Lean: `initialize` and `to` are keywords, so the pool uses `initPool` and
 `recipient`; its LP getters are `lpBalanceOf`/`lpAllowance`/`lpTotalSupply` (a contract
@@ -48,7 +48,7 @@ Yul to bytecode with solc; every Foundry test deploys that bytecode.
 
 | Layer | Path | What it checks |
 |---|---|---|
-| Unit | `test/unit/` | 27 tests: every pool/router entry point, its reverts and its state effects |
+| Unit | `test/unit/` | 32 tests: every pool/router/factory entry point, its reverts and its state effects; the CREATE2 address; the full router → factory → pool stack |
 | Fuzz | `test/fuzz/` | exact swap formula accepted, one wei more rejected, k kept; proportional burns |
 | Invariant | `test/invariant/` | random operation sequences keep LP shares = supply, reserves = balances, reserves < 2^112, k monotone |
 | Differential | `test/differential/` | same fuzzed sequence on the Verity pool and a Solidity reference (`test/ref/RefPool.sol`): identical results |
