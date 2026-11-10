@@ -185,20 +185,12 @@ verity_contract Pool where
     emit "Sync" [nb0, nb1]
     return (amount0, amount1)
 
-  function nonreentrant(lock) swap (out0 : Uint256, out1 : Uint256, recipient : Address) : Unit := do
-    require (out0 > 0 || out1 > 0) "Pool: INSUFFICIENT_OUTPUT_AMOUNT"
-    let r0 ← getStorage reserve0
-    let r1 ← getStorage reserve1
-    require (out0 < r0) "Pool: INSUFFICIENT_LIQUIDITY"
-    require (out1 < r1) "Pool: INSUFFICIENT_LIQUIDITY"
-    let t0 ← getStorageAddr token0
-    let t1 ← getStorageAddr token1
-    require (recipient != t0) "Pool: INVALID_TO"
-    require (recipient != t1) "Pool: INVALID_TO"
-    if out0 > 0 then
-      safeTransfer t0 recipient out0
-    if out1 > 0 then
-      safeTransfer t1 recipient out1
+  -- The part of `swap` after the payouts: measure what arrived, enforce the fee-adjusted
+  -- k-check against the reserves read before the payouts, store the new reserves. One
+  -- linear body, so the k property is proved on it directly. Only `swap` calls it, under
+  -- the reentrancy lock, which is why post-interaction writes are allowed here.
+  function internal allow_post_interaction_writes settle (r0 : Uint256, r1 : Uint256, out0 : Uint256, out1 : Uint256,
+      t0 : Address, t1 : Address, recipient : Address) : Unit := do
     let me ← contractAddress
     let b0 ← balanceOf t0 me
     let b1 ← balanceOf t1 me
@@ -218,6 +210,22 @@ verity_contract Pool where
     let sender ← msgSender
     emit "Swap" [sender, in0, in1, out0, out1, recipient]
     emit "Sync" [b0, b1]
+
+  function nonreentrant(lock) swap (out0 : Uint256, out1 : Uint256, recipient : Address) : Unit := do
+    require (out0 > 0 || out1 > 0) "Pool: INSUFFICIENT_OUTPUT_AMOUNT"
+    let r0 ← getStorage reserve0
+    let r1 ← getStorage reserve1
+    require (out0 < r0) "Pool: INSUFFICIENT_LIQUIDITY"
+    require (out1 < r1) "Pool: INSUFFICIENT_LIQUIDITY"
+    let t0 ← getStorageAddr token0
+    let t1 ← getStorageAddr token1
+    require (recipient != t0) "Pool: INVALID_TO"
+    require (recipient != t1) "Pool: INVALID_TO"
+    if out0 > 0 then
+      safeTransfer t0 recipient out0
+    if out1 > 0 then
+      safeTransfer t1 recipient out1
+    settle r0 r1 out0 out1 t0 t1 recipient
 
   function nonreentrant(lock) sync () : Unit := do
     let t0 ← getStorageAddr token0
