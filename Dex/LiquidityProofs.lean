@@ -5,7 +5,10 @@ import Verity.Proofs.Stdlib.Math
 # L4: burns pay out a proportional share, bounded by the pool's balances
 
 `erc20Read_frame`: a token read (`balanceOf`) is a static call, so it keeps the pool's
-storage and address whatever the token answers.
+storage and address whatever the token answers. `isqrt_state`: the pool's square root (a
+256-step loop) only computes.
+
+L5 (`mint_first_locks_min_liquidity`): the first mint locks `MIN_LIQUIDITY` shares.
 -/
 
 open Verity Contracts Dex
@@ -29,8 +32,65 @@ theorem mulDiv512Down_le (a b c : Uint256) (hc : 0 < c.val) (hac : a.val ≤ c.v
     rw [Nat.mul_comm b.val]; exact Nat.mul_le_mul_right _ hac
   exact Nat.le_of_mul_le_mul_right (Nat.le_trans h1 h2) hc
 
+/-- A loop whose step only computes leaves the state unchanged. -/
+theorem loopList_state {σ : Type} (xs : List Nat) (init : σ) (body : Nat → σ → Contract σ)
+    (hbody : ∀ i a s, ∃ b, body i a s = .success b s) (s : ContractState) :
+    ∃ r, Contracts.loopList xs init body s = .success r s := by
+  induction xs generalizing init with
+  | nil => exact ⟨init, rfl⟩
+  | cons x xs ih =>
+    obtain ⟨b, hb⟩ := hbody x init s
+    obtain ⟨r, hr⟩ := ih b
+    refine ⟨r, ?_⟩
+    simp only [Contracts.loopList, List.foldlM] at hr ⊢
+    show Verity.bind (body x init) _ s = _
+    simp only [Verity.bind, hb]
+    exact hr
+
+theorem loopList_state' {σ : Type} {xs : List Nat} {init : σ} {body : Nat → σ → Contract σ}
+    {s s' : ContractState} {r : σ}
+    (h : Contracts.loopList xs init body s = .success r s')
+    (hbody : ∀ i a s, ∃ b, body i a s = .success b s) : s' = s := by
+  obtain ⟨r', hr⟩ := loopList_state xs init body hbody s
+  rw [hr] at h
+  injection h with _ h
+  exact h.symm
+
+/-- `isqrt` only computes: on success the state is unchanged. -/
+theorem isqrt_state (n r : Uint256) (s s' : ContractState)
+    (h : Dex.Pool.isqrt n s = .success r s') : s' = s := by
+  have tail : ∀ (z : Uint256) (s1 : ContractState),
+      (Verity.bind (Pure.pure PUnit.unit) fun _ => Verity.bind
+        (require (decide (EVM.Uint256.mul z z ≤ n)) "isqrt: too large") fun _ =>
+        Verity.bind (require (decide (EVM.Uint256.sub n (EVM.Uint256.mul z z) ≤
+          EVM.Uint256.mul 2 z)) "isqrt: too small") fun _ => Pure.pure z) s1 =
+        .success r s' → s' = s1 := by
+    intro z s1 hb
+    obtain ⟨_, _, hp, hb⟩ := bind_success hb
+    obtain ⟨_, _, hq, hb⟩ := bind_success hb
+    obtain ⟨-, h1⟩ := require_success hq
+    obtain ⟨_, _, hq, hb⟩ := bind_success hb
+    obtain ⟨-, h2⟩ := require_success hq
+    injection hp with _ hp
+    injection hb with _ hb
+    rw [← hb, h2, h1, ← hp]
+  unfold Dex.Pool.isqrt at h
+  simp only [Bind.bind] at h
+  split at h
+  · obtain ⟨zx, sL, hL, hk⟩ := bind_success h
+    have hsL := loopList_state' hL (fun i a s => by
+      obtain ⟨z, x⟩ := a
+      split <;> exact ⟨_, rfl⟩)
+    subst hsL
+    exact tail zx.1 _ hk
+  · split at h
+    · exact tail 1 s h
+    · exact tail 0 s h
+
 /-- A token read keeps the caller's storage words and address, for every adversary. -/
-theorem erc20Read_frame {adv : Compiler.CompilationModel.DenoteExternalCalls.AdversaryModel} {name : String} {token : Address}
+theorem erc20Read_frame
+    {adv : Compiler.CompilationModel.DenoteExternalCalls.AdversaryModel} {name : String}
+    {token : Address}
     {args : List Uint256} {s s' : ContractState} {v : Uint256}
     (h : erc20Read adv name token args s = .success v s') :
     s'.storageWords = s.storageWords ∧ s'.thisAddress = s.thisAddress := by
@@ -138,3 +198,101 @@ theorem burn_payout_le (ctx : ExecutableCallContext) (recipient : Address)
   subst hv
   exact ⟨b0, b1, mulDiv512Down_mul_le _ _ _, mulDiv512Down_mul_le _ _ _,
     fun hle => ⟨mulDiv512Down_le _ _ _ hsup hle, mulDiv512Down_le _ _ _ hsup hle⟩⟩
+
+open Dex.ProofKit in
+/-- L5: the first mint (empty supply) locks `MIN_LIQUIDITY = 1000` shares at the zero
+address and sets the supply to those 1000 plus the minted shares, which are positive. -/
+theorem mint_first_locks_min_liquidity (recipient : Address) (s s' : ContractState)
+    (v : Uint256) (hsup : s.storage 5 = 0) (hrcpt : recipient ≠ zeroAddress)
+    (h : Pool.mint recipient s = .success v s') :
+    s'.storage 5 = EVM.Uint256.add 1000 v ∧
+      s'.storageMap 6 zeroAddress = EVM.Uint256.add (s.storageMap 6 zeroAddress) 1000 ∧
+      0 < v.val := by
+  unfold Pool.mint Verity.Core.NonReentrantGuard.guarded at h
+  split at h
+  · split at h
+    · rename_i a s'' hbody
+      injection h with ha hs'
+      subst ha hs'
+      replace hbody := Contract.eq_of_run_success hbody
+      simp only [Bind.bind] at hbody
+      obtain ⟨_, _, h1, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, h2, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, h3, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, h4, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, h5, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨-, hs6⟩ := require_success hq
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨-, hs7⟩ := require_success hq
+      obtain ⟨_, _, h8, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, h9, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨-, hs10⟩ := require_success hq
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨-, hs11⟩ := require_success hq
+      obtain ⟨sup, _, h12, hb12⟩ := bind_success hbody
+      simp only [getStorageAddr, Contracts.contractAddress, getStorage, Pool.token0,
+        Pool.token1, Pool.reserve0, Pool.reserve1, Pool.totalSupply] at h1 h2 h3 h8 h9 h12
+      injection h1 with _ h1
+      injection h2 with _ h2
+      injection h3 with _ h3
+      injection h8 with _ h8
+      injection h9 with _ h9
+      injection h12 with hsupR h12
+      obtain ⟨hw4, -⟩ := erc20Read_frame h4
+      obtain ⟨hw5, -⟩ := erc20Read_frame h5
+      subst h1 h2 h3 h8 h9 h12 hs6 hs7 hs10 hs11
+      have hsup0 : sup = 0 := by
+        rw [← hsupR, ← hsup]
+        simp only [ContractState.readSlot, ContractState.storage]
+        rw [hw5, hw4]; rfl
+      split at hb12
+      · obtain ⟨root, _, c1, c2⟩ := bind_success hb12
+        have hi := isqrt_state _ _ _ _ c1
+        obtain ⟨_, _, hq, c3⟩ := bind_success c2
+        obtain ⟨-, hr1⟩ := require_success hq
+        obtain ⟨lockedBal, _, c4, c5⟩ := bind_success c3
+        obtain ⟨_, _, c6, c7⟩ := bind_success c5
+        obtain ⟨_, _, c8, c9⟩ := bind_success c7
+        obtain ⟨_, _, hq, c10⟩ := bind_success c9
+        obtain ⟨hliq, hr2⟩ := require_success hq
+        obtain ⟨supplyNow, _, c11, c12⟩ := bind_success c10
+        obtain ⟨_, _, c13, c14⟩ := bind_success c12
+        obtain ⟨toBal, _, c15, c16⟩ := bind_success c14
+        obtain ⟨_, _, c17, c18⟩ := bind_success c16
+        obtain ⟨_, _, c19, c20⟩ := bind_success c18
+        obtain ⟨_, _, c21, c22⟩ := bind_success c20
+        obtain ⟨_, _, c23, c24⟩ := bind_success c22
+        obtain ⟨_, _, c25, c26⟩ := bind_success c24
+        obtain ⟨_, _, c27, c28⟩ := bind_success c26
+        simp only [getMapping, setMapping, setStorage, getStorage, msgSender, emit,
+          Pool.balances, Pool.totalSupply, Pool.reserve0, Pool.reserve1, Verity.pure,
+          Pure.pure] at c4 c6 c8 c11 c13 c15 c17 c19 c21 c23 c25 c27 c28
+        injection c4 with hlb c4
+        injection c6 with _ c6
+        injection c8 with _ c8
+        injection c11 with hsn c11
+        injection c13 with _ c13
+        injection c15 with _ c15
+        injection c17 with _ c17
+        injection c19 with _ c19
+        injection c21 with _ c21
+        injection c23 with _ c23
+        injection c25 with _ c25
+        injection c27 with _ c27
+        injection c28 with hv c28
+        subst hi hr1 c4 c6 c8 hr2 c11 c13 c15 c17 c19 c21 c23 c25 c27 c28 hv hsn hlb
+        refine ⟨?_, ?_, of_decide_eq_true hliq⟩
+        · simp [ContractState.storage, ContractState.writeSlot, ContractState.writeMap,
+            ContractState.readSlot, Verity.Core.NonReentrantGuard.setLock,
+            ContractState.writeTransient]
+        · simp only [ContractState.storageMap, ContractState.writeSlot, ContractState.writeMap,
+            ContractState.readMap, Verity.Core.NonReentrantGuard.setLock,
+            ContractState.writeTransient]
+          simp [hw5, hw4, Verity.Core.NonReentrantGuard.setLock, ContractState.writeTransient]
+          exact fun h0 => absurd h0.symm hrcpt
+      · rename_i hne
+        simp [hsup0] at hne
+    · simp at h
+  · simp at h

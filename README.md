@@ -31,9 +31,15 @@ including reentrant ones.
 | L1 | A pool is initialised once, only by its factory | `initPool_reverts_when_not_factory`, `initPool_reverts_when_initialized`, `initPool_succeeds`, `initPool_records_tokens`, `initPool_marks_initialized` |
 | L2 | LP transfers conserve the holder sum | `transfer_succeeds`, `transfer_balances`, `transfer_conserves_lp_sum` |
 | L3 | A successful swap never decreases `reserve0 * reserve1` | `swap_k_nondecreasing` (with `settle_k_nondecreasing`, `k_of_check`) |
+| L4 | A burn pays the rounded-down share `liquidity / supply` of each measured balance: positive, and at most that balance when `liquidity ≤ supply` | `burn_proportional`, `burn_payout_le` |
+| L5 | The first mint locks 1000 shares at the zero address; supply = 1000 + minted shares, minted > 0 | `mint_first_locks_min_liquidity` (with `isqrt_state`, `loopList_state`) |
 | L6 | Every reserve write keeps reserves below 2^112 (L3's precondition) | `sync_/mint_/burn_preserves_reserve_cap`, `swap_k_nondecreasing` |
 | L7 | With the lock held, `swap`/`mint`/`sync` revert without effect | `swap_reverts_when_locked`, `mint_reverts_when_locked`, `sync_reverts_when_locked` |
 | L8 | A swap asking for no output reverts | `swap_reverts_without_output` |
+| F1, F4 | A created pool is registered once, under both token orders, and counted | `createPool_registers` |
+| F2 | Creating an existing pair reverts | `createPool_reverts_existing` |
+| F3 | Identical tokens revert | `createPool_reverts_identical` |
+| F5 | The pool address is CREATE2(factory, salt, `poolCodeHash`): the deployed code hashes to `poolCodeHash` | `createPool_address` |
 | R1 | Past the deadline every router entry point reverts | `swapExactIn_/addLiquidity_/removeLiquidity_reverts_after_deadline` |
 | R2 | A successful `swapExactIn` returns at least `amountOutMin` | `swapExactIn_respects_min` |
 | R4 | A successful `removeLiquidity` returns at least both minimums | `removeLiquidity_respects_mins` |
@@ -60,7 +66,11 @@ Yul to bytecode with solc; every Foundry test deploys that bytecode.
   cover its supported fragment; solc is trusted; gas is not modelled.
 - External calls (tokens, pools seen from the router/factory) are modelled as an
   arbitrary adversary or oracle; properties never assume a well-behaved token.
-- `keccak256` and CREATE2 use the fork's exact models (`fix/edsl-memory-hash-semantics`).
+- `keccak256` and CREATE2 use the fork's exact models (`fix/edsl-memory-hash-semantics`); loops
+  run like the bytecode (`fix/foreach-executable-iterates`).
+- `mint`'s own token reads (`balanceOf`) use Verity's default answers: Verity gives an entry
+  point with only view calls no adversary parameter (being fixed upstream), so L5 holds for
+  those answers; `burn`, `swap` and the router take the adversary.
 
 ## Reproduce
 
