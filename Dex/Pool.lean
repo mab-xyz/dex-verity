@@ -235,8 +235,8 @@ verity_contract Pool where
     let b1 ← balanceOf t1 me
     require (b0 < 5192296858534827628530496329220096) "Pool: OVERFLOW"
     require (b1 < 5192296858534827628530496329220096) "Pool: OVERFLOW"
+    emit "Sync" [b0, b1]
     setStorage reserve0 b0
     setStorage reserve1 b1
-    emit "Sync" [b0, b1]
 
 end Dex

@@ -152,6 +152,47 @@ theorem settle_k_nondecreasing (r0 r1 out0 out1 : Uint256) (t0 t1 rcpt : Address
   have := k_of_check r0 r1 b0 b1 _ _ hr0 hr1 hb0' hb1' (input_le b0 r0 out0) (input_le b1 r1 out1) hk
   simpa using this
 
+/-- Reserve-cap invariant for `sync`: after a successful sync both reserves are below 2^112
+(the bound `swap_k_nondecreasing` needs), whatever the token contracts report. -/
+theorem sync_preserves_reserve_cap (s s' : ContractState)
+    (h : Pool.sync s = .success () s') :
+    (s'.storage 3).val < 2 ^ 112 ∧ (s'.storage 4).val < 2 ^ 112 := by
+  unfold Pool.sync Verity.Core.NonReentrantGuard.guarded at h
+  split at h
+  · split at h
+    · rename_i a s'' hbody
+      injection h with _ hs'
+      subst hs'
+      replace hbody := Contract.eq_of_run_success hbody
+      simp only [Bind.bind] at hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨b0, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨b1, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨hb0, -⟩ := require_success hq
+      obtain ⟨_, _, hq, hbody⟩ := bind_success hbody
+      obtain ⟨hb1, -⟩ := require_success hq
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, hw0, hbody⟩ := bind_success hbody
+      simp only [setStorage, Pool.reserve0, Pool.reserve1] at hw0 hbody
+      injection hw0 with _ hw0
+      injection hbody with _ hbody
+      subst hw0 hbody
+      have hcap : (5192296858534827628530496329220096 : Uint256).val = 2 ^ 112 := rfl
+      have hb0' : b0.val < 2 ^ 112 := by
+        have := of_decide_eq_true hb0; rw [← hcap]; exact this
+      have hb1' : b1.val < 2 ^ 112 := by
+        have := of_decide_eq_true hb1; rw [← hcap]; exact this
+      have hstor : ∀ (x : ContractState) n,
+          (Verity.Core.NonReentrantGuard.setLock 9 0 x).storage n = x.storage n := fun _ _ => rfl
+      rw [hstor, hstor]
+      simp only [ContractState.storage, ContractState.writeSlot] at *
+      exact ⟨by simpa using hb0', by simpa using hb1'⟩
+    · simp at h
+  · simp at h
+
 end Dex.ProofKit
 
 open Dex.ProofKit in
