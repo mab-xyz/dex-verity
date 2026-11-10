@@ -7,7 +7,7 @@ package «dex-verity» where
 -- Verity with the mab-xyz fork fixes (composite returns, ECM checks, real
 -- keccak256/CREATE2 semantics and copyBytes in the EDSL, ...).
 require verity from git
-  "https://github.com/mab-xyz/verity.git"@"95e7d5260e5448e3ca0d4c2916ce3e24f6293efc"
+  "https://github.com/mab-xyz/verity.git"@"5a5521a450438559805c71b94d1de06891a731ca"
 
 @[default_target]
 lean_lib «Dex» where

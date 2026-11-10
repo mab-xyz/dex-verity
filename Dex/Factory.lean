@@ -20,7 +20,7 @@ construction; the salt is `keccak256(abi.encode(token0, token1))`, so the pool a
 `CREATE2(factory, salt, poolCodeHash)` for the sorted pair.
 
 Memory: the salt preimage uses the scratch words 0 and 32; the creation code is copied to
-0x2000, above the compiler's spill area (see the comment in `createPool`).
+0x2000, above the compiler's stack-spill slots (see the comment in `createPool`).
 -/
 verity_contract Factory where
   storage
@@ -62,10 +62,10 @@ verity_contract Factory where
       mstore 0 (addressToWord t0)
       mstore 32 (addressToWord t1)
     let salt := keccak256 0 64
-    -- The creation code (several KB) goes to 0x2000, above the compiler's spill area for
-    -- stack-spilled locals (fixed at 0x1000 and not reserved from the free-memory pointer,
-    -- which starts at 0x80: a copy at the free pointer overwrote spilled locals). The later
-    -- call encoding allocates at the free pointer (0x80), below both.
+    -- The creation code (several KB) goes to 0x2000: above the compiler's stack-spill slots
+    -- (from 0x1000; a copy at 0x80 would overwrite them), and nothing is allocated from the
+    -- free-memory pointer before CREATE2 consumes it. Reading the free pointer instead needs
+    -- `mload` outside `unsafe`, which Verity admits only with an assumed local obligation.
     let ptr := 8192
     unsafe "copy the pool creation code to free memory to hash and deploy it" do
       copyBytes initcode ptr
