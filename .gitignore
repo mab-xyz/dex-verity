@@ -1,0 +1,6 @@
+.lake
+/out/
+/cache/
+/artifacts/yul/
+plan-*.md
+__pycache__/
