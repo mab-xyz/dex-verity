@@ -139,6 +139,17 @@ contract PoolTest is DexBase {
         pool.mint(alice);
     }
 
+    // Every reserve write keeps balances below 2^112 (the k-check's overflow bound):
+    // a donation that pushes a balance over the cap makes burn revert.
+    function testBurnRejectsBalanceAbove112Bits() public {
+        uint256 liq = _deposit(4e18, 1e18, alice);
+        t0.mint(address(pool), (uint256(1) << 112) * 4);
+        vm.prank(alice);
+        pool.transfer(address(pool), liq / 10); // most of the donation stays in the pool
+        vm.expectRevert(bytes("Pool: OVERFLOW"));
+        pool.burn(bob);
+    }
+
     // L7: a token that calls back into the pool during a transfer hits the lock.
     function testReentrancyIsBlocked() public {
         _deposit(10e18, 10e18, alice);

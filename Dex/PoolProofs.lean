@@ -1,6 +1,7 @@
 import Dex.Pool
 import Verity.Proofs.Stdlib.Automation
 import Verity.Specs.Common.Sum
+import Verity.Core.Model.NonReentrantGuard
 
 /-!
 # Pool properties
@@ -116,5 +117,39 @@ theorem transfer_conserves_lp_sum (s : ContractState) (dst : Address) (amount : 
   funext acc a
   rw [transfer_balances s dst amount hne hbal a]
   simp
+
+/-! ## L7: the reentrancy lock -/
+
+/-- L7: while the lock (transient slot 9) is held, `swap` reverts without effect. -/
+theorem swap_reverts_when_locked (ctx : ExecutableCallContext) (out0 out1 : Uint256)
+    (recipient : Address) (s : ContractState) (hlock : s.transientStorage 9 ≠ 0) :
+    Pool.swap ctx out0 out1 recipient s =
+      ContractResult.revert "reentrant call blocked" s := by
+  unfold Pool.swap
+  exact Verity.Core.NonReentrantGuard.guarded_locked_reverts 9 _ s hlock
+
+/-- L7: while the lock is held, `mint` reverts without effect. -/
+theorem mint_reverts_when_locked (recipient : Address) (s : ContractState)
+    (hlock : s.transientStorage 9 ≠ 0) :
+    Pool.mint recipient s = ContractResult.revert "reentrant call blocked" s := by
+  unfold Pool.mint
+  exact Verity.Core.NonReentrantGuard.guarded_locked_reverts 9 _ s hlock
+
+/-- L7: while the lock is held, `sync` reverts without effect. -/
+theorem sync_reverts_when_locked (s : ContractState) (hlock : s.transientStorage 9 ≠ 0) :
+    Pool.sync s = ContractResult.revert "reentrant call blocked" s := by
+  unfold Pool.sync
+  exact Verity.Core.NonReentrantGuard.guarded_locked_reverts 9 _ s hlock
+
+/-! ## L8: degenerate swaps revert -/
+
+/-- L8: a swap that asks for no output reverts, and leaves the state unchanged. -/
+theorem swap_reverts_without_output (ctx : ExecutableCallContext) (recipient : Address)
+    (s : ContractState) :
+    ∃ msg, Pool.swap ctx 0 0 recipient s = ContractResult.revert msg s := by
+  unfold Pool.swap Verity.Core.NonReentrantGuard.guarded
+  by_cases hlock : s.transientStorage 9 = 0
+  · simp [hlock, Verity.require, Verity.bind, Bind.bind, Contract.run]
+  · simp [hlock]
 
 end Dex.PoolProofs

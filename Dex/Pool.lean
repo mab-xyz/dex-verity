@@ -175,6 +175,9 @@ verity_contract Pool where
     safeTransfer t1 recipient amount1
     let nb0 ← balanceOf t0 me
     let nb1 ← balanceOf t1 me
+    -- Every reserve write keeps the 2^112 cap the swap k-check relies on.
+    require (nb0 < 5192296858534827628530496329220096) "Pool: OVERFLOW"
+    require (nb1 < 5192296858534827628530496329220096) "Pool: OVERFLOW"
     setStorage reserve0 nb0
     setStorage reserve1 nb1
     let sender ← msgSender
