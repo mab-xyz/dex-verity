@@ -35,6 +35,8 @@ including reentrant ones.
 | L7 | With the lock held, `swap`/`mint`/`sync` revert without effect | `swap_reverts_when_locked`, `mint_reverts_when_locked`, `sync_reverts_when_locked` |
 | L8 | A swap asking for no output reverts | `swap_reverts_without_output` |
 | R1 | Past the deadline every router entry point reverts | `swapExactIn_/addLiquidity_/removeLiquidity_reverts_after_deadline` |
+| R2 | A successful `swapExactIn` returns at least `amountOutMin` | `swapExactIn_respects_min` |
+| R4 | A successful `removeLiquidity` returns at least both minimums | `removeLiquidity_respects_mins` |
 
 P1 (`isqrt` is exact) holds by construction: the pool checks `r*r ≤ n ≤ r*r + 2r` at
 runtime after its Babylonian loop.
