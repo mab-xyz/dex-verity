@@ -65,3 +65,10 @@ abstract contract DexBase is Test {
         return inFee * rOut / (rIn * 1000 + inFee);
     }
 }
+
+interface IFactory {
+    function getPool(address a, address b) external view returns (address);
+    function allPoolsLength() external view returns (uint256);
+    function poolAt(uint256 i) external view returns (address);
+    function createPool(address a, address b, bytes calldata initcode) external returns (address);
+}

@@ -4,9 +4,10 @@ open Lake DSL
 package «dex-verity» where
   version := v!"0.1.0"
 
--- Verity with the mab-xyz fork fixes (struct/composite returns, ECM checks, ...).
+-- Verity with the mab-xyz fork fixes (composite returns, ECM checks, real
+-- keccak256/CREATE2 semantics and copyBytes in the EDSL, ...).
 require verity from git
-  "https://github.com/mab-xyz/verity.git"@"adc0582f34096d32bd9f3a0a274b7bc8d70ecd3b"
+  "https://github.com/mab-xyz/verity.git"@"95e7d5260e5448e3ca0d4c2916ce3e24f6293efc"
 
 @[default_target]
 lean_lib «Dex» where
