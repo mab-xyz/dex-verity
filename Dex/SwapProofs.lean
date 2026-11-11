@@ -211,12 +211,14 @@ theorem setLock_readAddrSlot (s : ContractState) (n : Nat) :
     ContractState.writeTransient, ContractState.storageAddr]
 
 /-- L9: after a successful `sync`, each reserve is the value its token returned to
-`balanceOf(pool)`, for every adversary (every token behaviour). -/
-theorem sync_reserves_eq_reported (ctx : ExecutableCallContext) (s s' : ContractState)
+`balanceOf(pool)`. The reads start at the locked pre-state and execute sequentially,
+for every adversary (every token behaviour). -/
+theorem sync_reserves_observed (ctx : ExecutableCallContext) (s s' : ContractState)
     (h : Pool.sync ctx s = .success () s') :
-    ∃ sA sA' sB sB',
-      balanceOf (s.storageAddr 1) s.thisAddress ctx.adversary sA = .success (s'.storage 3) sA' ∧
-      balanceOf (s.storageAddr 2) s.thisAddress ctx.adversary sB = .success (s'.storage 4) sB' := by
+    ∃ mid last,
+      balanceOf (s.storageAddr 1) s.thisAddress ctx.adversary
+        (Verity.Core.NonReentrantGuard.setLock 9 1 s) = .success (s'.storage 3) mid ∧
+      balanceOf (s.storageAddr 2) s.thisAddress ctx.adversary mid = .success (s'.storage 4) last := by
   unfold Pool.sync Verity.Core.NonReentrantGuard.guarded at h
   split at h
   · split at h
@@ -254,9 +256,18 @@ theorem sync_reserves_eq_reported (ctx : ExecutableCallContext) (s s' : Contract
       rw [h3, h4]
       rw [externalArgAddress_address, externalArgAddress_address, setLock_readAddrSlot]
         at hb0r hb1r
-      exact ⟨_, _, _, _, hb0r, hb1r⟩
+      exact ⟨_, _, hb0r, hb1r⟩
     · simp at h
   · simp at h
+
+/-- Compatibility corollary; use `sync_reserves_observed` for anchored, sequential reads. -/
+theorem sync_reserves_eq_reported (ctx : ExecutableCallContext) (s s' : ContractState)
+    (h : Pool.sync ctx s = .success () s') :
+    ∃ sA sA' sB sB',
+      balanceOf (s.storageAddr 1) s.thisAddress ctx.adversary sA = .success (s'.storage 3) sA' ∧
+      balanceOf (s.storageAddr 2) s.thisAddress ctx.adversary sB = .success (s'.storage 4) sB' := by
+  obtain ⟨mid, last, h0, h1⟩ := sync_reserves_observed ctx s s' h
+  exact ⟨_, mid, mid, last, h0, h1⟩
 
 /-- Reserve-cap invariant for `mint`: after a successful mint both reserves are below
 2^112, on the first-deposit path and on later deposits alike. -/

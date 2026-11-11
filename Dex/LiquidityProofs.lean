@@ -121,14 +121,17 @@ end Dex.ProofKit
 open Dex.ProofKit in
 /-- L4: a successful burn pays `floor(liquidity * balance / supply)` of each token, where
 `liquidity` is the pool's own LP balance and `supply` the LP supply before the burn, and
-`balance` the pool's token balance it measured; each payout is positive, and at most that
-balance when the burnt shares do not exceed the supply. Holds for every token behaviour. -/
-theorem burn_proportional (ctx : ExecutableCallContext) (recipient : Address)
+`balance` the pool's reported token balance. The reads are sequential and anchored to the
+locked pre-state. Each payout is positive. Holds for every token behaviour. -/
+theorem burn_proportional_observed (ctx : ExecutableCallContext) (recipient : Address)
     (s s' : ContractState) (v : Uint256 × Uint256)
     (h : Pool.burn ctx recipient s = .success v s') :
     let liq := s.storageMap 6 s.thisAddress
     let supply := s.storage 5
-    ∃ b0 b1 : Uint256,
+    ∃ (b0 b1 : Uint256) (mid last : ContractState),
+      balanceOf (s.storageAddr 1) s.thisAddress ctx.adversary
+        (Verity.Core.NonReentrantGuard.setLock 9 1 s) = .success b0 mid ∧
+      balanceOf (s.storageAddr 2) s.thisAddress ctx.adversary mid = .success b1 last ∧
       v = (Verity.Stdlib.Math.mulDiv512Down liq b0 supply,
         Verity.Stdlib.Math.mulDiv512Down liq b1 supply) ∧
       0 < supply.val ∧ 0 < v.1.val ∧ 0 < v.2.val := by
@@ -159,8 +162,8 @@ theorem burn_proportional (ctx : ExecutableCallContext) (recipient : Address)
       injection hbody with hv _
       simp only [getStorageAddr, Contracts.contractAddress, getMapping, getStorage,
         Pool.token0, Pool.token1, Pool.balances, Pool.totalSupply] at h1 h2 h3 h6 h7
-      injection h1 with _ h1
-      injection h2 with _ h2
+      injection h1 with ht0 h1
+      injection h2 with ht1 h2
       injection h3 with hme h3
       injection h6 with hl h6
       injection h7 with hsup h7
@@ -176,14 +179,51 @@ theorem burn_proportional (ctx : ExecutableCallContext) (recipient : Address)
         simp only [ContractState.readSlot, ContractState.storage, supply] at *
         rw [hw5, hw4]; rfl
       subst hl' hsup'
-      refine ⟨b0, b1, hv.symm, of_decide_eq_true hsp, ?_, ?_⟩
+      have read0 := h4
+      have read1 := h5
+      subst ht0 ht1 hme
+      rw [externalArgAddress_address, externalArgAddress_address, setLock_readAddrSlot]
+        at read0 read1
+      refine ⟨b0, b1, _, _, read0, read1, hv.symm, of_decide_eq_true hsp, ?_, ?_⟩
       · rw [← hv]; exact of_decide_eq_true ha0
       · rw [← hv]; exact of_decide_eq_true ha1
     · simp at h
   · simp at h
 
+/-- Compatibility corollary; `burn_proportional_observed` links the balances to execution. -/
+theorem burn_proportional (ctx : ExecutableCallContext) (recipient : Address)
+    (s s' : ContractState) (v : Uint256 × Uint256)
+    (h : Pool.burn ctx recipient s = .success v s') :
+    let liq := s.storageMap 6 s.thisAddress
+    let supply := s.storage 5
+    ∃ b0 b1 : Uint256,
+      v = (Verity.Stdlib.Math.mulDiv512Down liq b0 supply,
+        Verity.Stdlib.Math.mulDiv512Down liq b1 supply) ∧
+      0 < supply.val ∧ 0 < v.1.val ∧ 0 < v.2.val := by
+  obtain ⟨b0, b1, _, _, _, _, hp⟩ := burn_proportional_observed ctx recipient s s' v h
+  exact ⟨b0, b1, hp⟩
+
 open Dex.ProofKit in
-/-- L4 bounds: each burn payout is the rounded-down share `liquidity / supply` of the
+/-- L4 bounds on the actual sequential observations from the locked pre-state. -/
+theorem burn_payout_le_observed (ctx : ExecutableCallContext) (recipient : Address)
+    (s s' : ContractState) (v : Uint256 × Uint256)
+    (h : Pool.burn ctx recipient s = .success v s') :
+    ∃ (b0 b1 : Uint256) (mid last : ContractState),
+      balanceOf (s.storageAddr 1) s.thisAddress ctx.adversary
+        (Verity.Core.NonReentrantGuard.setLock 9 1 s) = .success b0 mid ∧
+      balanceOf (s.storageAddr 2) s.thisAddress ctx.adversary mid = .success b1 last ∧
+      v.1.val * (s.storage 5).val ≤ (s.storageMap 6 s.thisAddress).val * b0.val ∧
+      v.2.val * (s.storage 5).val ≤ (s.storageMap 6 s.thisAddress).val * b1.val ∧
+      ((s.storageMap 6 s.thisAddress).val ≤ (s.storage 5).val →
+        v.1.val ≤ b0.val ∧ v.2.val ≤ b1.val) := by
+  obtain ⟨b0, b1, mid, last, h0, h1, hv, hsup, _, _⟩ :=
+    burn_proportional_observed ctx recipient s s' v h
+  subst hv
+  exact ⟨b0, b1, mid, last, h0, h1, mulDiv512Down_mul_le _ _ _, mulDiv512Down_mul_le _ _ _,
+    fun hle => ⟨mulDiv512Down_le _ _ _ hsup hle, mulDiv512Down_le _ _ _ hsup hle⟩⟩
+
+open Dex.ProofKit in
+/-- Compatibility bounds: each burn payout is the rounded-down share `liquidity / supply` of the
 measured balance, and at most that balance when `liquidity ≤ supply`. -/
 theorem burn_payout_le (ctx : ExecutableCallContext) (recipient : Address)
     (s s' : ContractState) (v : Uint256 × Uint256)
@@ -299,8 +339,9 @@ theorem mint_first_locks_min_liquidity (ctx : ExecutableCallContext) (recipient 
 
 open Dex.ProofKit in
 /-- L2 for `mint`: the minted shares `v > 0` go to the recipient, no other holder changes
-except the zero address on the first mint, and the supply grows by exactly what the
-balances grow by (first mint: `1000 + v`, with 1000 locked at the zero address). -/
+except the zero address on the first mint, and supply and balances change by the same
+modular additions (first mint: `1000 + v`, with 1000 credited to the zero address).
+Integer growth requires additional no-overflow bounds. -/
 theorem mint_lp_accounting (ctx : ExecutableCallContext) (recipient : Address)
     (s s' : ContractState) (v : Uint256) (hrcpt : recipient ≠ zeroAddress)
     (h : Pool.mint ctx recipient s = .success v s') :

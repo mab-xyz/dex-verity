@@ -124,8 +124,8 @@ conclusion of `swap_k_nondecreasing`).
 - **Why it matters:** this is L3's hypothesis, and it guarantees `reserve0 * reserve1` never
   wraps around 2^256 (T4).
 - **Closing the loop:** a fresh pool has reserves 0, and every writer keeps the cap. So by
-  induction over any sequence of successful calls, L3's hypothesis always holds and k never
-  falls.
+  induction over successful pool calls with entrypoint-bounded callbacks, L3's reserve-cap
+  hypothesis is maintained. The k comparison applies to swaps; burns and sync can lower k.
 
 **P2–P4, the swap formula**: pure math in `Dex/Math.lean`, the formula the router quotes.
 - **P2** (`getAmountOut_lt_reserve`): an exact-in swap never asks for the whole output
@@ -133,8 +133,9 @@ conclusion of `swap_k_nondecreasing`).
 - **P3** (`getAmountOut_mono`): more input never yields less output, so there is no
   price inversion to exploit.
 - **P4** (`kCheck_getAmountOut`): paying `amountIn` and taking `getAmountOut(amountIn)`
-  passes the pool's k-check. The router's quote is therefore always acceptable to the pool,
-  and honest users are not rejected.
+  passes the mathematical k-check. Full pool acceptance also requires nonzero output,
+  reserve caps, successful transfers and sufficient actual input; this theorem does not
+  establish those conditions or refinement to the router's machine arithmetic.
 
 **P6, the exact-out formula is sufficient** (`getAmountOut_getAmountIn`).
 - Paying `getAmountIn(out)` buys at least `out`. The rounding-up in `getAmountIn` is
@@ -151,7 +152,7 @@ conclusion of `swap_k_nondecreasing`).
 - **`mint_lp_accounting`**, for every token answer:
   - a successful `mint` gives the recipient (any address other than 0) exactly the `v`
     shares it reports, and `v > 0`;
-  - the supply grows by exactly `v`;
+  - the supply changes by `v` modulo 2^256; integer growth additionally needs no overflow;
   - no other holder's balance changes;
   - exception, the first mint: the supply becomes `1000 + v`, with the extra 1000 credited
     to address 0 (see L5).
@@ -165,20 +166,23 @@ conclusion of `swap_k_nondecreasing`).
   - *What it does not say:* LP balances can legitimately move during a burn, through a
     re-entrant `transfer` (see [What is not covered](#what-is-not-covered)).
 
-**L4, burns are proportional and rounded in the pool's favour** (`burn_proportional`,
-`burn_payout_le`).
+**L4, burns are proportional and rounded in the pool's favour** (`burn_proportional_observed`,
+`burn_payout_le_observed`).
 - **Says:** burning `liq` of `supply` shares pays `liq * balance / supply` of each token,
-  rounded down, and both amounts are positive. With `liq ≤ supply`, no payout exceeds the
-  pool's balance.
-- **Why it matters (T4):** no sequence of mints and burns can extract more than a
-  proportional share. Rounding always favours the remaining LPs.
+  rounded down, and both amounts are positive. The balances are linked to two sequential
+  `balanceOf` calls starting from the initial state with the pool lock acquired. With
+  `liq ≤ supply`, no computed payout exceeds its corresponding reported balance.
+- **Why it matters (T4):** each burn computes at most the reported proportional share.
+  This is not a recipient-receipt guarantee or a conservation theorem over call sequences.
+  The legacy `burn_proportional` and `burn_payout_le` statements remain available.
 
 **L5, the first deposit locks 1000 shares** (`mint_first_locks_min_liquidity`).
 - **Says:** the first `mint` into an empty pool sets the supply to `1000 + v`. The 1000 go
   to address 0, which can never burn them, and the depositor gets `v > 0`.
 - **Why it matters (T5):** this is Uniswap V2's defence against the share-inflation attack.
-  With a permanent floor of 1000 shares, an attacker cannot make one share worth so much that
-  later deposits round down to zero shares.
+  Locking shares increases the cost of donation-based inflation; it does not prevent later
+  deposits from rounding to zero. Permanent unspendability requires a separate lifetime
+  invariant with caller-origin restrictions.
 
 **P1, the square root is exact** (`Dex.Isqrt.isqrt_eq_sqrt`, `isqrt_floor`).
 - **Says:** the first mint prices shares at `isqrt(amount0 * amount1)`. The theorem proves
@@ -198,9 +202,11 @@ conclusion of `swap_k_nondecreasing`).
 
 ### Pool state reflects reality (T1, T2)
 
-**L9, `sync` stores what the tokens report** (`sync_reserves_eq_reported`).
+**L9, `sync` stores what the tokens report** (`sync_reserves_observed`).
 - **Says:** after a successful `sync`, each reserve is exactly the value that token
-  returned to `balanceOf(pool)`, for every token behaviour.
+  returned to `balanceOf(pool)`, for every token behaviour. The first read starts at the
+  initial locked state; the second starts at the first read's resulting state. The legacy
+  `sync_reserves_eq_reported` statement remains available as a weaker corollary.
 - **Why it matters:** `sync` is how a pool recovers from tokens sent directly to it
   (donations), or from a token whose balance changes on its own (rebasing). The theorem
   says the pool adopts the token's own report and nothing else. If the token lies, the pool
@@ -244,8 +250,8 @@ These hold whatever the factory, pool and tokens answer: the checks are in the r
   mempool cannot execute at a stale price.
 
 **R2, slippage on swaps** (`swapExactIn_respects_min`).
-- A successful `swapExactIn` returns at least `amountOutMin`. A sandwich attack can push the
-  price only as far as the user's own bound.
+- A successful `swapExactIn` returns at least `amountOutMin`. This bounds the computed
+  output, not the recipient's balance increase: a fee-charging output token can deliver less.
 
 **R3, deposits stay within bounds** (`quoteAmounts_bounds`).
 - **Says:** the amounts `addLiquidity` transfers, computed by the helper `quoteAmounts`,
@@ -256,7 +262,8 @@ These hold whatever the factory, pool and tokens answer: the checks are in the r
   and fuzz-tested on the bytecode.
 
 **R4, slippage on withdrawals** (`removeLiquidity_respects_mins`).
-- A successful `removeLiquidity` returns at least both minimums.
+- A successful `removeLiquidity` returns at least both minimums. These are reported amounts,
+  not proved recipient balance increases.
 
 ## Threat coverage map
 
