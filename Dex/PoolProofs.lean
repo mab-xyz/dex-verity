@@ -99,8 +99,9 @@ theorem transfer_balances (s : ContractState) (dst : Address) (amount : Uint256)
   by_cases h1 : a = dst <;> by_cases h2 : a = s.sender <;> simp_all [Ne.symm hne]
 
 /-- L2 for `transfer`: the sum of LP balances over any tracked set of holders that contains
-both parties is unchanged (shares move, none are created or destroyed). The no-overflow
-hypothesis on the recipient follows from the supply invariant `NoSupplyOverflow`. -/
+both parties is unchanged (shares move, none are created or destroyed). Recipient
+non-overflow is an explicit hypothesis; this file does not prove a reachable-state
+supply invariant establishing it. -/
 theorem transfer_conserves_lp_sum (s : ContractState) (dst : Address) (amount : Uint256)
     (addrs : Verity.Core.FiniteAddressSet)
     (hne : s.sender ≠ dst) (hbal : s.storageMap 6 s.sender ≥ amount)

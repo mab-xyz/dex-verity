@@ -8,4 +8,5 @@ import Dex.Factory
 import Dex.FactoryProofs
 import Dex.LiquidityProofs
 import Dex.BurnRegistryProofs
+import Dex.NatAccountingProofs
 import Dex.IsqrtProofs

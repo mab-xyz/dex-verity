@@ -217,12 +217,13 @@ theorem registry_preserves (c : Uint256) (adv : AdversaryModel) :
     (sync_entrypoint_preserves c adv)
 
 open Dex.ProofKit in
-/-- L2 for `burn`: the supply drops by exactly the pool's own LP balance (the shares sent to
-it), for every adversary whose reentrant calls are calls into the pool's entry points
+/-- L2 for `burn`: supply changes by modular subtraction of the pool's own LP balance
+(the shares sent to it), for every adversary whose reentrant calls are calls into the pool's entry points
 (`CallbackBounded`). Holds although the token calls may re-enter `transfer`,
 `transferFrom` or `approve`: none of them writes the supply, and every entry point that
 does is under the lock `burn` holds. LP balances themselves can move during those calls,
-so the theorem says nothing about them. -/
+so the theorem says nothing about them. `Dex.NatAccounting.burn_supply_exact_iff`
+characterizes when this is also an ordinary natural-number decrease. -/
 theorem burn_supply_drops_by_burned (ctx : ExecutableCallContext) (recipient : Address)
     (s s' : ContractState) (v : Uint256 × Uint256)
     (hbound : CallbackBounded Pool.entrypointRegistry ctx.adversary)

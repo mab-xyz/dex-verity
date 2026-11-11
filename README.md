@@ -146,7 +146,7 @@ conclusion of `swap_k_nondecreasing`).
 **L2, LP shares are conserved.**
 - **`transfer_conserves_lp_sum`** (with `transfer_balances` and `transfer_succeeds`):
   - an LP transfer moves shares and creates none: the sum of balances over any set of
-    holders containing both parties is unchanged;
+    holders containing both parties is unchanged, assuming the recipient addition cannot overflow;
   - only the two parties' balances change;
   - a transfer within the sender's balance succeeds.
 - **`mint_lp_accounting`**, for every token answer:
@@ -156,8 +156,8 @@ conclusion of `swap_k_nondecreasing`).
   - no other holder's balance changes;
   - exception, the first mint: the supply becomes `1000 + v`, with the extra 1000 credited
     to address 0 (see L5).
-- **`burn_supply_drops_by_burned`**: the supply drops by exactly the shares burned, i.e. the
-  pool's own LP balance at the start of the burn.
+- **`burn_supply_drops_by_burned`**: the supply is the modular difference between its
+  initial value and the pool's own LP balance at the start of the burn.
   - This one is proved under reentrancy. During the payout, a token may call back into any
     pool entry point, any number of times (Verity's `CallbackBounded` model).
   - The proof (`registry_preserves`) checks all twelve entry points. The four locked ones
@@ -165,6 +165,19 @@ conclusion of `swap_k_nondecreasing`).
     `transferFrom`) never write the supply.
   - *What it does not say:* LP balances can legitimately move during a burn, through a
     re-entrant `transfer` (see [What is not covered](#what-is-not-covered)).
+- **Natural-number accounting** (`Dex.NatAccounting`):
+  - `mint_supply_exact_iff` proves that supply grows by the reported shares (plus the
+    initial 1000 allocation) exactly when the final addition fits below 2^256.
+  - `mint_lp_accounting_nat` proves ordinary integer supply and holder-balance growth
+    under that headroom condition and pre-state holder balances bounded by supply.
+  - `burn_supply_exact_iff` proves `postSupply + burned = preSupply` exactly when
+    `burned ≤ preSupply`; `burn_supply_drops_nat` applies that condition. Both retain the
+    callback restriction of the modular burn theorem.
+  - These bounds are explicit obligations, not a proved invariant over reachable states.
+    The reserve cap alone cannot discharge them: in the executable model, reserves `(1,1)`,
+    reported balances `(2,2)` and supply `2^255` allow a mint of `2^255` shares that wraps
+    supply to zero. `Dex/AccountingChecks.lean` checks this arbitrary-state counterexample
+    and neighboring non-overflow cases. It does not establish reachability from deployment.
 
 **L4, burns are proportional and rounded in the pool's favour** (`burn_proportional_observed`,
 `burn_payout_le_observed`).
