@@ -97,4 +97,21 @@ theorem kCheck_getAmountOut {amountIn rIn rOut : Nat} (hrIn : 0 < rIn) :
 theorem quote_mul_le {amountA rA rB : Nat} : quote amountA rA rB * rA ≤ amountA * rB :=
   Nat.div_mul_le_self _ _
 
+/-- P6: paying `getAmountIn out` buys at least `out`: the rounded-up input is enough. -/
+theorem getAmountOut_getAmountIn {out rIn rOut : Nat} (hrIn : 0 < rIn) (hout : out < rOut) :
+    out ≤ getAmountOut (getAmountIn out rIn rOut) rIn rOut := by
+  unfold getAmountOut getAmountIn feeNum feeDen
+  have hdpos : 0 < (rOut - out) * 997 := Nat.mul_pos (by omega) (by norm_num)
+  have hcover : rIn * out * 1000 < (rIn * out * 1000 / ((rOut - out) * 997) + 1) *
+      ((rOut - out) * 997) := by
+    have := Nat.lt_div_mul_add (a := rIn * out * 1000) hdpos
+    rw [Nat.add_mul, one_mul]; exact this
+  rw [Nat.le_div_iff_mul_le (by positivity)]
+  set A := rIn * out * 1000 / ((rOut - out) * 997) + 1
+  have hsub : rOut = (rOut - out) + out := by omega
+  have key : out * (rIn * 1000) ≤ A * 997 * (rOut - out) := by nlinarith [hcover]
+  calc out * (rIn * 1000 + A * 997) = out * (rIn * 1000) + A * 997 * out := by ring
+    _ ≤ A * 997 * (rOut - out) + A * 997 * out := by omega
+    _ = A * 997 * rOut := by rw [← Nat.mul_add, Nat.sub_add_cancel hout.le]
+
 end Dex.Math

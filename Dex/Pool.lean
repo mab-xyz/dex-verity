@@ -43,7 +43,8 @@ verity_contract Pool where
     setStorageAddr factory deployer
 
   -- Integer square root: Babylonian iteration, then a runtime check that the result is
-  -- exact, so every successful call satisfies `r*r ≤ n < (r+1)*(r+1)` (property P1).
+  -- exact. P1 (`Dex.Isqrt.isqrt_eq_sqrt`): for n < 2^255 the 256 rounds always reach
+  -- `Nat.sqrt n`, so the checks never revert.
   function internal isqrt (n : Uint256) : Uint256 := do
     let mut z := 0
     if n > 3 then

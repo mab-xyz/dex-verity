@@ -24,10 +24,12 @@ including reentrant ones.
 
 | Id | Property | Theorem(s) |
 |---|---|---|
+| P1 | The pool's `isqrt` returns the floor square root (`r² ≤ n < (r+1)²`) and never reverts, for `n < 2^255` | `Dex.Isqrt.isqrt_eq_sqrt`, `isqrt_floor` |
 | P2 | An exact-in swap never drains the output reserve | `Dex.Math.getAmountOut_lt_reserve` |
 | P3 | More input never gives less output | `Dex.Math.getAmountOut_mono` |
 | P4 | Paying `amountIn` and taking `getAmountOut` passes the k-check | `Dex.Math.kCheck_getAmountOut` |
 | P5 | `quote` never overstates | `Dex.Math.quote_mul_le` |
+| P6 | Paying `getAmountIn out` buys at least `out` | `Dex.Math.getAmountOut_getAmountIn` |
 | L1 | A pool is initialised once, only by its factory | `initPool_reverts_when_not_factory`, `initPool_reverts_when_initialized`, `initPool_succeeds`, `initPool_records_tokens`, `initPool_marks_initialized` |
 | L2 | LP accounting: transfers conserve the holder sum; `mint` adds the minted shares to the recipient and the supply (first mint: plus 1000 locked at the zero address), no other holder changes; `burn` lowers the supply by exactly the pool's own LP balance, even if the tokens re-enter the pool | `transfer_conserves_lp_sum` (with `transfer_succeeds`, `transfer_balances`), `mint_lp_accounting`, `burn_supply_drops_by_burned` (with `registry_preserves`) |
 | L3 | A successful swap never decreases `reserve0 * reserve1` | `swap_k_nondecreasing` (with `settle_k_nondecreasing`, `k_of_check`) |
@@ -45,9 +47,6 @@ including reentrant ones.
 | R2 | A successful `swapExactIn` returns at least `amountOutMin` | `swapExactIn_respects_min` |
 | R3 | `addLiquidity` never transfers more than the desired amounts; into a non-empty pool one amount is the desired one and the other meets its minimum | `quoteAmounts_bounds` (the helper computing the transferred amounts) |
 | R4 | A successful `removeLiquidity` returns at least both minimums | `removeLiquidity_respects_mins` |
-
-P1 (`isqrt` is exact) holds by construction: the pool checks `r*r ≤ n ≤ r*r + 2r` at
-runtime after its Babylonian loop.
 
 ## Testing the compiled EVM code
 
