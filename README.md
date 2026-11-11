@@ -29,7 +29,7 @@ including reentrant ones.
 | P4 | Paying `amountIn` and taking `getAmountOut` passes the k-check | `Dex.Math.kCheck_getAmountOut` |
 | P5 | `quote` never overstates | `Dex.Math.quote_mul_le` |
 | L1 | A pool is initialised once, only by its factory | `initPool_reverts_when_not_factory`, `initPool_reverts_when_initialized`, `initPool_succeeds`, `initPool_records_tokens`, `initPool_marks_initialized` |
-| L2 | LP accounting: transfers conserve the holder sum; `mint` adds the minted shares to the recipient and the supply (first mint: plus 1000 locked at the zero address), no other holder changes; `burn` zeroes the pool's own balance and lowers the supply by exactly it, no other holder changes | `transfer_conserves_lp_sum` (with `transfer_succeeds`, `transfer_balances`), `mint_lp_accounting`, `burn_lp_accounting` |
+| L2 | LP accounting: transfers conserve the holder sum; `mint` adds the minted shares to the recipient and the supply (first mint: plus 1000 locked at the zero address), no other holder changes; `burn` lowers the supply by exactly the pool's own LP balance, even if the tokens re-enter the pool | `transfer_conserves_lp_sum` (with `transfer_succeeds`, `transfer_balances`), `mint_lp_accounting`, `burn_supply_drops_by_burned` (with `registry_preserves`) |
 | L3 | A successful swap never decreases `reserve0 * reserve1` | `swap_k_nondecreasing` (with `settle_k_nondecreasing`, `k_of_check`) |
 | L4 | A burn pays the rounded-down share `liquidity / supply` of each measured balance: positive, and at most that balance when `liquidity ≤ supply` | `burn_proportional`, `burn_payout_le` |
 | L5 | The first mint locks 1000 shares at the zero address; supply = 1000 + minted shares, minted > 0 | `mint_first_locks_min_liquidity` (with `isqrt_state`, `loopList_state`) |
@@ -73,9 +73,10 @@ Yul to bytecode with solc; every Foundry test deploys that bytecode.
 - Token reads (`balanceOf`), including those inside helpers (`Pool.settle`) and in `mint` and
   `sync`, are answered by the call context's adversary (`fix/view-call-helpers-adversary`):
   every pool and router theorem quantifies over all token answers.
-- `burn_lp_accounting` assumes the token calls in `burn` do not write the pool's storage
-  (`hadv`). On chain the reentrancy lock guarantees it: any reentrant call into the pool
-  reverts. Verity's registry machinery (`CallbackBounded`) could derive it; not done here.
+- Reentrancy (`burn_supply_drops_by_burned`): the token calls may re-enter any pool entry
+  point (`CallbackBounded Pool.entrypointRegistry`, Verity's reentrancy model). The guarded
+  ones revert under the lock; `transfer`, `transferFrom` and `approve` are not guarded, so
+  LP balances can move during a burn and the theorem states only the supply.
 
 ## Reproduce
 
