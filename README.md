@@ -340,3 +340,7 @@ SOLC=solc scripts/build-evm.sh            # Yul + bytecode in out/
 forge test                                # unit, fuzz, invariant, differential
 scripts/mutants.sh                        # every mutant must be KILLED
 ```
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
