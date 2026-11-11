@@ -129,15 +129,16 @@ theorem swap_reverts_when_locked (ctx : ExecutableCallContext) (out0 out1 : Uint
   exact Verity.Core.NonReentrantGuard.guarded_locked_reverts 9 _ s hlock
 
 /-- L7: while the lock is held, `mint` reverts without effect. -/
-theorem mint_reverts_when_locked (recipient : Address) (s : ContractState)
-    (hlock : s.transientStorage 9 ≠ 0) :
-    Pool.mint recipient s = ContractResult.revert "reentrant call blocked" s := by
+theorem mint_reverts_when_locked (ctx : ExecutableCallContext) (recipient : Address)
+    (s : ContractState) (hlock : s.transientStorage 9 ≠ 0) :
+    Pool.mint ctx recipient s = ContractResult.revert "reentrant call blocked" s := by
   unfold Pool.mint
   exact Verity.Core.NonReentrantGuard.guarded_locked_reverts 9 _ s hlock
 
 /-- L7: while the lock is held, `sync` reverts without effect. -/
-theorem sync_reverts_when_locked (s : ContractState) (hlock : s.transientStorage 9 ≠ 0) :
-    Pool.sync s = ContractResult.revert "reentrant call blocked" s := by
+theorem sync_reverts_when_locked (ctx : ExecutableCallContext) (s : ContractState)
+    (hlock : s.transientStorage 9 ≠ 0) :
+    Pool.sync ctx s = ContractResult.revert "reentrant call blocked" s := by
   unfold Pool.sync
   exact Verity.Core.NonReentrantGuard.guarded_locked_reverts 9 _ s hlock
 

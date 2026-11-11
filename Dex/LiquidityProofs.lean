@@ -202,9 +202,9 @@ theorem burn_payout_le (ctx : ExecutableCallContext) (recipient : Address)
 open Dex.ProofKit in
 /-- L5: the first mint (empty supply) locks `MIN_LIQUIDITY = 1000` shares at the zero
 address and sets the supply to those 1000 plus the minted shares, which are positive. -/
-theorem mint_first_locks_min_liquidity (recipient : Address) (s s' : ContractState)
-    (v : Uint256) (hsup : s.storage 5 = 0) (hrcpt : recipient ≠ zeroAddress)
-    (h : Pool.mint recipient s = .success v s') :
+theorem mint_first_locks_min_liquidity (ctx : ExecutableCallContext) (recipient : Address)
+    (s s' : ContractState) (v : Uint256) (hsup : s.storage 5 = 0)
+    (hrcpt : recipient ≠ zeroAddress) (h : Pool.mint ctx recipient s = .success v s') :
     s'.storage 5 = EVM.Uint256.add 1000 v ∧
       s'.storageMap 6 zeroAddress = EVM.Uint256.add (s.storageMap 6 zeroAddress) 1000 ∧
       0 < v.val := by

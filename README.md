@@ -68,9 +68,9 @@ Yul to bytecode with solc; every Foundry test deploys that bytecode.
   arbitrary adversary or oracle; properties never assume a well-behaved token.
 - `keccak256` and CREATE2 use the fork's exact models (`fix/edsl-memory-hash-semantics`); loops
   run like the bytecode (`fix/foreach-executable-iterates`).
-- `mint`'s own token reads (`balanceOf`) use Verity's default answers: Verity gives an entry
-  point with only view calls no adversary parameter (being fixed upstream), so L5 holds for
-  those answers; `burn`, `swap` and the router take the adversary.
+- Token reads (`balanceOf`), including those inside helpers (`Pool.settle`) and in `mint` and
+  `sync`, are answered by the call context's adversary (`fix/view-call-helpers-adversary`):
+  every pool and router theorem quantifies over all token answers.
 
 ## Reproduce
 

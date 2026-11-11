@@ -115,9 +115,10 @@ set_option maxRecDepth 8000 in
 /-- L3 (core): if `settle` succeeds, the new reserves (slots 3, 4) are below 2^112 and their
 product is at least the product of the reserves it was given (also below 2^112), whatever
 the token balances it read. -/
-theorem settle_k_nondecreasing (r0 r1 out0 out1 : Uint256) (t0 t1 rcpt : Address)
-    (s s' : ContractState) (hr0 : r0.val < 2 ^ 112) (hr1 : r1.val < 2 ^ 112)
-    (h : Pool.settle r0 r1 out0 out1 t0 t1 rcpt s = .success () s') :
+theorem settle_k_nondecreasing (ctx : ExecutableCallContext) (r0 r1 out0 out1 : Uint256)
+    (t0 t1 rcpt : Address) (s s' : ContractState) (hr0 : r0.val < 2 ^ 112)
+    (hr1 : r1.val < 2 ^ 112)
+    (h : Pool.settle ctx r0 r1 out0 out1 t0 t1 rcpt s = .success () s') :
     (s'.storage 3).val < 2 ^ 112 ∧ (s'.storage 4).val < 2 ^ 112 ∧
       r0.val * r1.val ≤ (s'.storage 3).val * (s'.storage 4).val := by
   unfold Pool.settle at h
@@ -154,8 +155,8 @@ theorem settle_k_nondecreasing (r0 r1 out0 out1 : Uint256) (t0 t1 rcpt : Address
 
 /-- Reserve-cap invariant for `sync`: after a successful sync both reserves are below 2^112
 (the bound `swap_k_nondecreasing` needs), whatever the token contracts report. -/
-theorem sync_preserves_reserve_cap (s s' : ContractState)
-    (h : Pool.sync s = .success () s') :
+theorem sync_preserves_reserve_cap (ctx : ExecutableCallContext) (s s' : ContractState)
+    (h : Pool.sync ctx s = .success () s') :
     (s'.storage 3).val < 2 ^ 112 ∧ (s'.storage 4).val < 2 ^ 112 := by
   unfold Pool.sync Verity.Core.NonReentrantGuard.guarded at h
   split at h
@@ -195,8 +196,8 @@ theorem sync_preserves_reserve_cap (s s' : ContractState)
 
 /-- Reserve-cap invariant for `mint`: after a successful mint both reserves are below
 2^112, on the first-deposit path and on later deposits alike. -/
-theorem mint_preserves_reserve_cap (recipient : Address) (s s' : ContractState)
-    (v : Uint256) (h : Pool.mint recipient s = .success v s') :
+theorem mint_preserves_reserve_cap (ctx : ExecutableCallContext) (recipient : Address)
+    (s s' : ContractState) (v : Uint256) (h : Pool.mint ctx recipient s = .success v s') :
     (s'.storage 3).val < 2 ^ 112 ∧ (s'.storage 4).val < 2 ^ 112 := by
   unfold Pool.mint Verity.Core.NonReentrantGuard.guarded at h
   split at h
@@ -342,7 +343,7 @@ theorem swap_k_nondecreasing (ctx : ExecutableCallContext) (out0 out1 : Uint256)
       have hr1s : r1 = s.storage 4 := by
         rw [← hr1v, ← hsB, hsA]; rfl
       -- the final state is `settle`'s, whichever payouts ran
-      have hset : ∃ sJ, Pool.settle r0 r1 out0 out1 t0 t1 rcpt sJ = .success a s'' := by
+      have hset : ∃ sJ, Pool.settle ctx r0 r1 out0 out1 t0 t1 rcpt sJ = .success a s'' := by
         split at hbody <;> (try obtain ⟨_, _, -, hbody⟩ := bind_success hbody) <;>
           split at hbody <;>
           (try obtain ⟨_, _, -, hbody⟩ := bind_success hbody) <;> exact ⟨_, hbody⟩
@@ -351,6 +352,6 @@ theorem swap_k_nondecreasing (ctx : ExecutableCallContext) (out0 out1 : Uint256)
         fun _ => rfl
       rw [hstor 3, hstor 4]
       rw [hr0s, hr1s] at hset
-      exact settle_k_nondecreasing _ _ _ _ _ _ _ _ _ hr0 hr1 hset
+      exact settle_k_nondecreasing _ _ _ _ _ _ _ _ _ _ hr0 hr1 hset
     · simp at h
   · simp at h
