@@ -1,8 +1,10 @@
 import Dex.NatAccountingProofs
 
-/-! Reachable executable witness under changing token balances. Only constructor,
-initPool, mint and sync mutate pool state. The EVM counterpart uses actual rebasing
-token storage, not invented balanceOf responses or direct pool storage writes. -/
+/-! Regression for the LP-supply overflow reachable with rebasing tokens. From deployment,
+rebase-to-1 + `sync` + deposit cycles grow the supply to 2^255; the next cycle would wrap it
+to zero. `mint` now reverts with `Pool: SUPPLY_OVERFLOW` instead, and the ledger is intact.
+Only constructor, initPool, mint and sync mutate pool state. The EVM counterpart
+(`test/unit/RebaseOverflow.t.sol`) uses actual rebasing token storage. -/
 open Verity Contracts Dex
 
 namespace Dex.RebaseOverflowChecks
@@ -53,9 +55,12 @@ private def witness : Except String Unit := do
   check (ledger s (2^200)) "second mint"
   let s ← grow s (2^55) (2^255 - 2^200)
   check (ledger s (2^255)) "third mint"
-  let s ← grow s 2 (2^255)
-  check ((s.storage 5).val == 0 && (s.storageMap 6 7).val == 2^256 - 1000 &&
-    (s.storageMap 6 zeroAddress).val == 1000) "reachable overflow"
+  -- The cycle that used to wrap the supply to zero now reverts, and nothing changes.
+  let (_, s) ← step (Pool.sync (ctx 1) s)
+  match Pool.mint (ctx 2) 7 s with
+  | .success _ _ => .error "overflowing mint succeeded"
+  | .revert msg _ =>
+    check (msg == "Pool: SUPPLY_OVERFLOW" && ledger s (2^255)) "overflow reverts"
 
 -- Independent unbounded-integer reference, including the first overflowing boundary.
 #guard 2^100 * 2^100 = (2^200 : Nat)

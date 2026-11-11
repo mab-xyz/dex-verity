@@ -298,6 +298,8 @@ theorem mint_first_locks_min_liquidity (ctx : ExecutableCallContext) (recipient 
         obtain ⟨_, _, hq, c10⟩ := bind_success c9
         obtain ⟨hliq, hr2⟩ := require_success hq
         obtain ⟨supplyNow, _, c11, c12⟩ := bind_success c10
+        obtain ⟨_, _, hqs, c12⟩ := bind_success c12
+        obtain ⟨hnowrap, hsq⟩ := require_success hqs
         obtain ⟨_, _, c13, c14⟩ := bind_success c12
         obtain ⟨toBal, _, c15, c16⟩ := bind_success c14
         obtain ⟨_, _, c17, c18⟩ := bind_success c16
@@ -322,7 +324,7 @@ theorem mint_first_locks_min_liquidity (ctx : ExecutableCallContext) (recipient 
         injection c25 with _ c25
         injection c27 with _ c27
         injection c28 with hv c28
-        subst hi hr1 c4 c6 c8 hr2 c11 c13 c15 c17 c19 c21 c23 c25 c27 c28 hv hsn hlb
+        subst hi hr1 c4 c6 c8 hr2 c11 c13 c15 c17 c19 c21 c23 c25 c27 c28 hv hsn hlb hsq
         refine ⟨?_, ?_, of_decide_eq_true hliq⟩
         · simp [ContractState.storage, ContractState.writeSlot, ContractState.writeMap,
             ContractState.readSlot, Verity.Core.NonReentrantGuard.setLock,
@@ -350,10 +352,12 @@ theorem mint_lp_accounting (ctx : ExecutableCallContext) (recipient : Address)
       (∀ a, a ≠ recipient → a ≠ zeroAddress → s'.storageMap 6 a = s.storageMap 6 a) ∧
       (s.storage 5 = 0 →
           s'.storage 5 = EVM.Uint256.add 1000 v ∧
-            s'.storageMap 6 zeroAddress = EVM.Uint256.add (s.storageMap 6 zeroAddress) 1000) ∧
+            s'.storageMap 6 zeroAddress = EVM.Uint256.add (s.storageMap 6 zeroAddress) 1000 ∧
+            (1000 : Uint256).val ≤ (s'.storage 5).val) ∧
       (s.storage 5 ≠ 0 →
           s'.storage 5 = EVM.Uint256.add (s.storage 5) v ∧
-            s'.storageMap 6 zeroAddress = s.storageMap 6 zeroAddress) := by
+            s'.storageMap 6 zeroAddress = s.storageMap 6 zeroAddress ∧
+            (s.storage 5).val ≤ (s'.storage 5).val) := by
   unfold Pool.mint Verity.Core.NonReentrantGuard.guarded at h
   split at h
   · split at h
@@ -407,6 +411,8 @@ theorem mint_lp_accounting (ctx : ExecutableCallContext) (recipient : Address)
         obtain ⟨_, _, hq, c10⟩ := bind_success c9
         obtain ⟨hliq, hr2⟩ := require_success hq
         obtain ⟨supplyNow, _, c11, c12⟩ := bind_success c10
+        obtain ⟨_, _, hqs, c12⟩ := bind_success c12
+        obtain ⟨hnowrap, hsq⟩ := require_success hqs
         obtain ⟨_, _, c13, c14⟩ := bind_success c12
         obtain ⟨toBal, _, c15, c16⟩ := bind_success c14
         obtain ⟨_, _, c17, c18⟩ := bind_success c16
@@ -431,8 +437,8 @@ theorem mint_lp_accounting (ctx : ExecutableCallContext) (recipient : Address)
         injection c25 with _ c25
         injection c27 with _ c27
         injection c28 with hv c28
-        subst hi hr1 c4 c6 c8 hr2 c11 c13 c15 c17 c19 c21 c23 c25 c27 c28 hv hsn hlb htb
-        refine ⟨of_decide_eq_true hliq, ?_, ?_, fun _ => ⟨?_, ?_⟩, fun hne => absurd hs0 hne⟩
+        subst hi hr1 c4 c6 c8 hr2 c11 c13 c15 c17 c19 c21 c23 c25 c27 c28 hv hsn hlb htb hsq
+        refine ⟨of_decide_eq_true hliq, ?_, ?_, fun _ => ⟨?_, ?_, ?_⟩, fun hne => absurd hs0 hne⟩
         · simp only [ContractState.storageMap, ContractState.writeSlot, ContractState.writeMap,
             ContractState.readMap, Verity.Core.NonReentrantGuard.setLock,
             ContractState.writeTransient]
@@ -453,12 +459,19 @@ theorem mint_lp_accounting (ctx : ExecutableCallContext) (recipient : Address)
             ContractState.writeTransient]
           simp [hw5, hw4, Verity.Core.NonReentrantGuard.setLock, ContractState.writeTransient]
           exact fun h0 => absurd h0.symm hrcpt
+        · have hw := of_decide_eq_true hnowrap
+          simp [ContractState.storage, ContractState.writeSlot, ContractState.writeMap,
+            ContractState.readSlot, Verity.Core.NonReentrantGuard.setLock,
+            ContractState.writeTransient, hw5, hw4] at hw ⊢
+          exact hw
       · rename_i hz
         have hs0 : s.storage 5 ≠ 0 := by rw [← hsupE]; simpa using hz
         obtain ⟨_, _, c8, c9⟩ := bind_success hb12
         obtain ⟨_, _, hq, c10⟩ := bind_success c9
         obtain ⟨hliq, hr2⟩ := require_success hq
         obtain ⟨supplyNow, _, c11, c12⟩ := bind_success c10
+        obtain ⟨_, _, hqs, c12⟩ := bind_success c12
+        obtain ⟨hnowrap, hsq⟩ := require_success hqs
         obtain ⟨_, _, c13, c14⟩ := bind_success c12
         obtain ⟨toBal, _, c15, c16⟩ := bind_success c14
         obtain ⟨_, _, c17, c18⟩ := bind_success c16
@@ -481,8 +494,8 @@ theorem mint_lp_accounting (ctx : ExecutableCallContext) (recipient : Address)
         injection c25 with _ c25
         injection c27 with _ c27
         injection c28 with hv c28
-        subst c8 hr2 c11 c13 c15 c17 c19 c21 c23 c25 c27 c28 hv hsn htb
-        refine ⟨of_decide_eq_true hliq, ?_, ?_, fun h0 => absurd h0 hs0, fun _ => ⟨?_, ?_⟩⟩
+        subst c8 hr2 c11 c13 c15 c17 c19 c21 c23 c25 c27 c28 hv hsn htb hsq
+        refine ⟨of_decide_eq_true hliq, ?_, ?_, fun h0 => absurd h0 hs0, fun _ => ⟨?_, ?_, ?_⟩⟩
         · simp only [ContractState.storageMap, ContractState.writeSlot, ContractState.writeMap,
             ContractState.readMap, Verity.Core.NonReentrantGuard.setLock,
             ContractState.writeTransient]
@@ -502,5 +515,10 @@ theorem mint_lp_accounting (ctx : ExecutableCallContext) (recipient : Address)
             ContractState.writeTransient]
           simp [hw5, hw4, Verity.Core.NonReentrantGuard.setLock, ContractState.writeTransient]
           exact fun h0 => absurd h0.symm hrcpt
+        · have hw := of_decide_eq_true hnowrap
+          simp [ContractState.storage, ContractState.writeSlot, ContractState.writeMap,
+            ContractState.readSlot, Verity.Core.NonReentrantGuard.setLock,
+            ContractState.writeTransient, hw5, hw4] at hw ⊢
+          exact hw
     · simp at h
   · simp at h

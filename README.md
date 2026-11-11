@@ -152,7 +152,8 @@ conclusion of `swap_k_nondecreasing`).
 - **`mint_lp_accounting`**, for every token answer:
   - a successful `mint` gives the recipient (any address other than 0) exactly the `v`
     shares it reports, and `v > 0`;
-  - the supply changes by `v` modulo 2^256; integer growth additionally needs no overflow;
+  - the supply grows by exactly `v`: `mint` reverts with `Pool: SUPPLY_OVERFLOW` rather than
+    let the addition wrap around 2^256 (`Dex.NatAccounting.mint_supply_exact`);
   - no other holder's balance changes;
   - exception, the first mint: the supply becomes `1000 + v`, with the extra 1000 credited
     to address 0 (see L5).
@@ -166,24 +167,25 @@ conclusion of `swap_k_nondecreasing`).
   - *What it does not say:* LP balances can legitimately move during a burn, through a
     re-entrant `transfer` (see [What is not covered](#what-is-not-covered)).
 - **Natural-number accounting** (`Dex.NatAccounting`):
-  - `mint_supply_exact_iff` proves that supply grows by the reported shares (plus the
-    initial 1000 allocation) exactly when the final addition fits below 2^256.
-  - `mint_lp_accounting_nat` proves ordinary integer supply and holder-balance growth
-    under that headroom condition and pre-state holder balances bounded by supply.
+  - `mint_supply_exact` proves, for every token behaviour, that the supply grows by exactly
+    the minted shares (plus the initial 1000 allocation) as natural numbers. The contract's
+    overflow check makes this unconditional; `mint_supply_exact_iff` characterizes the
+    no-wrap condition itself.
+  - `mint_lp_accounting_nat` proves ordinary integer supply and holder-balance growth, given
+    pre-state holder balances bounded by the supply.
   - `burn_supply_exact_iff` proves `postSupply + burned = preSupply` exactly when
     `burned ≤ preSupply`; `burn_supply_drops_nat` applies that condition. Both retain the
     callback restriction of the modular burn theorem.
-  - These bounds are explicit obligations, not invariants under arbitrary rebasing tokens.
-    **Known reachable accounting bug:** start with a deposit of `2^100` of each token.
-    Before each later mint, negatively rebase both pool balances to 1 and call `sync`.
-    Deposit enough to bring each balance to `2^100`, then `2^55`, then 2. Supply becomes
-    `2^200`, then `2^255`, then wraps to zero. All reserve caps and quotient bounds hold.
-    The original LP retains `2^256 - 1000` shares and the zero address retains 1000.
-    `Dex/RebaseOverflowChecks.lean` executes this sequence from constructor/initialization;
-    `test/unit/RebaseOverflow.t.sol` reproduces it on compiled bytecode with truthful
-    rebasing token balances and no direct pool storage writes. The negative control uses
-    the same deposits without rebases and preserves the ledger. This does not demonstrate
-    an exploit with ordinary non-rebasing tokens. Runtime overflow prevention remains open.
+  - **Supply overflow with rebasing tokens (found, fixed).** Start with a deposit of `2^100`
+    of each token. Before each later mint, negatively rebase both pool balances to 1 and
+    call `sync`, then deposit enough to bring each balance to `2^100`, then `2^55`, then 2.
+    The supply becomes `2^200`, then `2^255`, and the next mint would wrap it to zero while
+    every reserve cap holds. `mint` now reverts with `Pool: SUPPLY_OVERFLOW` instead.
+    `Dex/RebaseOverflowChecks.lean` runs this sequence from deployment on the Lean
+    semantics, and `test/unit/RebaseOverflow.t.sol` runs it on the compiled bytecode with
+    real rebasing token balances. Both check that the overflowing mint reverts and the
+    ledger is unchanged; the mutant `supply-overflow-unchecked` shows the test catches a
+    missing check.
 
 **L4, burns are proportional and rounded in the pool's favour** (`burn_proportional_observed`,
 `burn_payout_le_observed`).
@@ -300,12 +302,11 @@ These hold whatever the factory, pool and tokens answer: the checks are in the r
 
 These are limits of the guarantees, stated so they are not mistaken for gaps in the proofs.
 
-- **Rebasing tokens can overflow the LP supply (known bug, not fixed).** With tokens whose
-  balances shrink without a transfer, repeated rebase-to-1, `sync`, deposit cycles multiply
-  the supply until it wraps around 2^256 to 0, while every reserve cap holds (see L2,
-  "Natural-number accounting"). Reproduced from deployment in
-  `Dex/RebaseOverflowChecks.lean` and `test/unit/RebaseOverflow.t.sol`. Ordinary
-  non-rebasing tokens are not shown to reach it.
+- **Rebasing tokens can inflate the LP supply.** With tokens whose balances shrink without
+  a transfer, repeated rebase-to-1, `sync`, deposit cycles multiply the supply. It can no
+  longer wrap around (see L2, "Natural-number accounting"), but it can approach 2^256,
+  after which further mints revert with `Pool: SUPPLY_OVERFLOW`. Pools with rebasing tokens
+  are at the LPs' risk.
 - **A lying token lies to the pool.** If a token's `balanceOf` reports funds it never
   received, the pool accepts them, as any balance-delta AMM does. L3 then still holds in
   the pool's accounting, but that accounting is only as true as the token. Pools with
@@ -331,11 +332,11 @@ then to bytecode with solc. Every Foundry test deploys that bytecode.
 
 | Layer | Path | What it checks |
 |---|---|---|
-| Unit | `test/unit/` | 34 tests: every pool, router and factory entry point, its reverts and its state effects; the CREATE2 address; the full router → factory → pool stack; both `addLiquidity` branches, and R3's bound fuzzed |
+| Unit | `test/unit/` | 36 tests: every pool, router and factory entry point, its reverts and its state effects; the CREATE2 address; the full router → factory → pool stack; both `addLiquidity` branches, and R3's bound fuzzed; the rebasing-token supply-overflow regression |
 | Fuzz | `test/fuzz/` | the exact swap formula is accepted, one wei more is rejected, k holds; burns are proportional |
 | Invariant | `test/invariant/` | random operation sequences keep LP shares = supply, reserves = balances, reserves < 2^112, and k monotone over swaps |
 | Differential | `test/differential/` | the same fuzzed sequence on the Verity pool and on a Solidity reference (`test/ref/RefPool.sol`) gives identical results |
-| Mutation | `scripts/mutants.sh` | six Yul mutants (fee removed, k-check flipped or removed, MIN_LIQUIDITY unlocked, burn cap removed, lock ignored); every one must be caught |
+| Mutation | `scripts/mutants.sh` | seven Yul mutants (fee removed, k-check flipped or removed, MIN_LIQUIDITY unlocked, burn cap removed, lock ignored, supply-overflow check removed); every one must be caught |
 
 ## Trust base
 

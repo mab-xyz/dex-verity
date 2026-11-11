@@ -1,8 +1,9 @@
 import Dex.BurnRegistryProofs
 
-/-! Natural-number LP accounting. Headroom and balance bounds are explicit obligations,
-not consequences of the existing reserve cap. The iff theorems characterize precisely
-when the modular implementation also satisfies ordinary integer accounting. -/
+/-! Natural-number LP accounting. `mint` reverts when the supply addition would wrap
+(`Pool: SUPPLY_OVERFLOW`), so supply growth is exact (`mint_supply_exact`). Holder-balance
+bounds and the burn subtraction remain explicit hypotheses. The iff theorems characterize
+when the modular arithmetic coincides with ordinary integer arithmetic. -/
 open Verity Contracts Dex
 open Compiler.CompilationModel.DenoteExternalCalls
 
@@ -31,6 +32,19 @@ theorem sub_exact_iff (a b : Uint256) :
     rw [he]
     exact Nat.sub_add_cancel h
 
+/-- A modular sum that is not below its first operand did not wrap. -/
+theorem add_exact_of_le (a b : Uint256) (h : a.val ≤ (EVM.Uint256.add a b).val) :
+    a.val + b.val < Core.Uint256.modulus := by
+  have hm : Core.Uint256.modulus = 2 ^ 256 := rfl
+  rw [hm]
+  by_contra hc
+  have ha : a.val < 2 ^ 256 := a.isLt
+  have hb : b.val < 2 ^ 256 := b.isLt
+  have hval : (EVM.Uint256.add a b).val = a.val + b.val - 2 ^ 256 := by
+    show (Core.Uint256.ofNat (a.val + b.val)).val = _
+    rw [Core.Uint256.val_ofNat, hm, Nat.mod_eq_sub_mod (by omega), Nat.mod_eq_of_lt (by omega)]
+  omega
+
 /-- Exact supply growth holds iff the final addition has room. No headroom is assumed. -/
 theorem mint_supply_exact_iff (ctx : ExecutableCallContext) (recipient : Address)
     (s s' : ContractState) (v : Uint256) (hr : recipient ≠ zeroAddress)
@@ -45,6 +59,24 @@ theorem mint_supply_exact_iff (ctx : ExecutableCallContext) (recipient : Address
   rw [hs]
   exact add_exact_iff _ _
 
+/-- `mint` grows the supply by exactly the minted shares (plus the 1000 locked on the first
+mint): its `SUPPLY_OVERFLOW` check rules out wrap-around, for every token behaviour. -/
+theorem mint_supply_exact (ctx : ExecutableCallContext) (recipient : Address)
+    (s s' : ContractState) (v : Uint256) (hr : recipient ≠ zeroAddress)
+    (h : Pool.mint ctx recipient s = .success v s') :
+    (s'.storage 5).val = (mintBase s).val + v.val := by
+  obtain ⟨_, _, _, hfirst, hlater⟩ := mint_lp_accounting ctx recipient s s' v hr h
+  have hs : s'.storage 5 = EVM.Uint256.add (mintBase s) v := by
+    by_cases hz : s.storage 5 = 0
+    · simpa [mintBase, hz] using (hfirst hz).1
+    · simpa [mintBase, hz] using (hlater hz).1
+  have hge : (mintBase s).val ≤ (s'.storage 5).val := by
+    by_cases hz : s.storage 5 = 0
+    · simpa [mintBase, hz] using (hfirst hz).2.2
+    · simpa [mintBase, hz] using (hlater hz).2.2
+  rw [hs] at hge ⊢
+  exact (add_exact_iff _ _).2 (add_exact_of_le _ _ hge)
+
 /-- Exact supply decrease holds iff the burned shares do not exceed supply.
 Callbacks are still restricted to the pool's registered entrypoints. -/
 theorem burn_supply_exact_iff (ctx : ExecutableCallContext) (recipient : Address)
@@ -56,12 +88,12 @@ theorem burn_supply_exact_iff (ctx : ExecutableCallContext) (recipient : Address
   rw [BurnRegistry.burn_supply_drops_by_burned ctx recipient s s' v hb h]
   exact sub_exact_iff _ _
 
-/-- Natural-number mint accounting under explicit supply headroom and pre-state holder
-bounds. These hypotheses must be established by a separate reachable-state invariant. -/
+/-- Natural-number mint accounting under a pre-state holder bound (each balance at most the
+supply), which must come from a separate reachable-state invariant. Supply headroom is not
+assumed: `mint_supply_exact` derives it from the contract's overflow check. -/
 theorem mint_lp_accounting_nat (ctx : ExecutableCallContext) (recipient : Address)
     (s s' : ContractState) (v : Uint256) (hr : recipient ≠ zeroAddress)
     (h : Pool.mint ctx recipient s = .success v s')
-    (hcap : (mintBase s).val + v.val < Core.Uint256.modulus)
     (hholders : ∀ a, (s.storageMap 6 a).val ≤ (s.storage 5).val) :
     0 < v.val ∧
       (s'.storageMap 6 recipient).val = (s.storageMap 6 recipient).val + v.val ∧
@@ -71,6 +103,10 @@ theorem mint_lp_accounting_nat (ctx : ExecutableCallContext) (recipient : Addres
         (if s.storage 5 = 0 then 1000 else 0) ∧
       (∀ a, a ≠ recipient → a ≠ zeroAddress → s'.storageMap 6 a = s.storageMap 6 a) := by
   obtain ⟨hv, hrec, hother, hfirst, hlater⟩ := mint_lp_accounting ctx recipient s s' v hr h
+  have hcap : (mintBase s).val + v.val < Core.Uint256.modulus := by
+    have hex := mint_supply_exact ctx recipient s s' v hr h
+    have hlt : (s'.storage 5).val < Core.Uint256.modulus := (s'.storage 5).isLt
+    omega
   have hbase : (s.storage 5).val ≤ (mintBase s).val := by
     by_cases hz : s.storage 5 = 0 <;> simp [mintBase, hz]
   have hrecCap : (s.storageMap 6 recipient).val + v.val < Core.Uint256.modulus :=
@@ -87,13 +123,13 @@ theorem mint_lp_accounting_nat (ctx : ExecutableCallContext) (recipient : Addres
         have := hholders zeroAddress
         simp [hz] at this
         exact this
-      rw [(hfirst hz).2]
+      rw [(hfirst hz).2.1]
       have hzeroCap : (s.storageMap 6 zeroAddress).val + (1000 : Uint256).val <
           Core.Uint256.modulus := by rw [hzero]; decide
       rw [(add_exact_iff _ _).2 hzeroCap]
       simp [hz]
       rfl
-    · rw [(hlater hz).2]
+    · rw [(hlater hz).2.1]
       simp [hz]
 
 /-- A pre-state holder bound is sufficient for a genuine integer decrease. -/

@@ -34,10 +34,17 @@ private def mintCheck (supply : Nat) (exact : Bool) : Bool :=
       (post.storageMap 6 7).val == (supply + expected) % (2^256) &&
       ((post.storage 5).val == supply + expected) == exact
 
--- Positive control, last even sum below modulus, first overflowing sum.
+/-- The mint reverts with `SUPPLY_OVERFLOW` and leaves the state as it was. -/
+private def mintRevertsOnOverflow (supply : Nat) : Bool :=
+  match Pool.mint (ctx 2) 7 (state supply) with
+  | .revert msg post => msg == "Pool: SUPPLY_OVERFLOW" && (post.storage 5).val == supply
+  | .success _ _ => false
+
+-- Positive control, last sum below the modulus (exact), first overflowing sum (reverts
+-- instead of wrapping to zero).
 #guard mintCheck 10000 true
 #guard mintCheck (2^255 - 1) true
-#guard mintCheck (2^255) false
+#guard mintRevertsOnOverflow (2^255)
 
 private def firstMintCheck : Bool :=
   let initial := ((state 0).writeSlot 3 0).writeSlot 4 0

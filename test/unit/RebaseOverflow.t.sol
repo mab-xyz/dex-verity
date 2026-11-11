@@ -14,7 +14,8 @@ contract RebaseToken is MockERC20 {
     }
 }
 
-/// Reachability witness for current behavior, not a claim that overflow is desirable.
+/// Regression for the LP-supply overflow reachable with rebasing tokens: the cycle that used
+/// to wrap the supply to zero must now revert with `Pool: SUPPLY_OVERFLOW`.
 contract RebaseOverflowTest is DexBase {
     function test_sameDepositsWithoutRebasesPreserveLedger() public {
         RebaseToken a = new RebaseToken();
@@ -36,7 +37,7 @@ contract RebaseOverflowTest is DexBase {
         }
     }
 
-    function test_rebasesReachSupplyOverflowFromDeployment() public {
+    function test_rebasesCannotWrapSupplyFromDeployment() public {
         RebaseToken a = new RebaseToken();
         RebaseToken b = new RebaseToken();
         IPool pool = IPool(deployBin("Pool", ""));
@@ -53,12 +54,15 @@ contract RebaseOverflowTest is DexBase {
         grow(a, b, pool, 1 << 55, (1 << 255) - (1 << 200));
         assertLedger(pool, 1 << 255);
 
-        // Each quotient fits; only the final supply addition overflows.
-        grow(a, b, pool, 2, 1 << 255);
-        assertEq(pool.lpTotalSupply(), 0);
-        assertEq(pool.lpBalanceOf(address(0)), 1000);
-        assertEq(pool.lpBalanceOf(address(this)), type(uint256).max - 999);
-        assertGt(pool.lpBalanceOf(address(this)), pool.lpTotalSupply());
+        // Each quotient fits; only the final supply addition would overflow. It reverts.
+        a.shrink(address(pool), 1);
+        b.shrink(address(pool), 1);
+        pool.sync();
+        a.mint(address(pool), 1);
+        b.mint(address(pool), 1);
+        vm.expectRevert(bytes("Pool: SUPPLY_OVERFLOW"));
+        pool.mint(address(this));
+        assertLedger(pool, 1 << 255);
     }
 
     function assertLedger(IPool pool, uint256 supply) internal view {

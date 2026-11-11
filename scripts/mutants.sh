@@ -28,6 +28,7 @@ mutant k-check-removed      's/if lt(mul(adj0, adj1), mul(mul(r0, r1), 1000000))
 mutant min-liquidity-unlocked 's/add(lockedBal, 1000)/add(lockedBal, 0)/g'
 mutant burn-cap-removed     's/if iszero(lt(nb0, 5192296858534827628530496329220096))/if 0/g; s/if iszero(lt(nb1, 5192296858534827628530496329220096))/if 0/g'
 mutant lock-ignored         's/if tload(9) {/if 0 {/g'
+mutant supply-overflow-unchecked 's/if lt(add(t0, liquidity), t0) {/if 0 {/g'
 cp out/Pool.yul.orig out/Pool.yul
 cp out/Pool.bin.orig out/Pool.bin
 rm -f out/Pool.yul.orig out/Pool.bin.orig

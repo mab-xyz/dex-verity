@@ -147,6 +147,9 @@ verity_contract Pool where
       liquidity := if l0 < l1 then l0 else l1
     require (liquidity > 0) "Pool: INSUFFICIENT_LIQUIDITY_MINTED"
     let supplyNow ← getStorage totalSupply
+    -- The supply addition must not wrap: with rebasing tokens, rebase-to-1 + sync + deposit
+    -- cycles can grow the supply geometrically (Dex/RebaseOverflowChecks.lean).
+    require (add supplyNow liquidity >= supplyNow) "Pool: SUPPLY_OVERFLOW"
     setStorage totalSupply (add supplyNow liquidity)
     let toBal ← getMapping balances recipient
     setMapping balances recipient (add toBal liquidity)
