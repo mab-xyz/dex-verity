@@ -194,6 +194,70 @@ theorem sync_preserves_reserve_cap (ctx : ExecutableCallContext) (s s' : Contrac
     · simp at h
   · simp at h
 
+/-- An address argument passes to an external call unchanged. -/
+theorem externalArgAddress_address (a : Address) : externalArgAddress a = a := by
+  simp only [externalArgAddress, externalArgWord, ExternalArg.toWords, List.head?_cons,
+    Option.getD_some, wordToAddress]
+  apply Core.Address.toNat_injective
+  have h1 := Core.Address.val_lt_modulus a
+  have h2 : a.toNat < Core.Uint256.modulus := lt_trans h1 (by decide)
+  simp [Core.Address.toNat_ofNat, Nat.mod_eq_of_lt h2]
+  exact Nat.mod_eq_of_lt h1
+
+/-- Taking the reentrancy lock (transient storage) leaves address slots unchanged. -/
+theorem setLock_readAddrSlot (s : ContractState) (n : Nat) :
+    (Verity.Core.NonReentrantGuard.setLock 9 1 s).readAddrSlot n = s.storageAddr n := by
+  simp [Verity.Core.NonReentrantGuard.setLock, ContractState.readAddrSlot,
+    ContractState.writeTransient, ContractState.storageAddr]
+
+/-- L9: after a successful `sync`, each reserve is the value its token returned to
+`balanceOf(pool)`, for every adversary (every token behaviour). -/
+theorem sync_reserves_eq_reported (ctx : ExecutableCallContext) (s s' : ContractState)
+    (h : Pool.sync ctx s = .success () s') :
+    ∃ sA sA' sB sB',
+      balanceOf (s.storageAddr 1) s.thisAddress ctx.adversary sA = .success (s'.storage 3) sA' ∧
+      balanceOf (s.storageAddr 2) s.thisAddress ctx.adversary sB = .success (s'.storage 4) sB' := by
+  unfold Pool.sync Verity.Core.NonReentrantGuard.guarded at h
+  split at h
+  · split at h
+    · rename_i a s'' hbody
+      injection h with _ hs'
+      subst hs'
+      replace hbody := Contract.eq_of_run_success hbody
+      simp only [Bind.bind] at hbody
+      obtain ⟨t0, s1, ht0, hbody⟩ := bind_success hbody
+      obtain ⟨t1, s2, ht1, hbody⟩ := bind_success hbody
+      obtain ⟨me, s3, hme, hbody⟩ := bind_success hbody
+      obtain ⟨b0, s4, hb0r, hbody⟩ := bind_success hbody
+      obtain ⟨b1, s5, hb1r, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, -, hbody⟩ := bind_success hbody
+      obtain ⟨_, _, hw0, hbody⟩ := bind_success hbody
+      simp only [setStorage, Pool.reserve0, Pool.reserve1] at hw0 hbody
+      injection hw0 with _ hw0
+      injection hbody with _ hbody
+      subst hw0 hbody
+      simp only [getStorageAddr, Pool.token0, Pool.token1] at ht0 ht1
+      injection ht0 with ht0 hs1
+      injection ht1 with ht1 hs2
+      simp only [Contracts.contractAddress] at hme
+      injection hme with hme hs3
+      subst hs1 hs2 hs3 ht0 ht1 hme
+      have hstor : ∀ (x : ContractState) n,
+          (Verity.Core.NonReentrantGuard.setLock 9 0 x).storage n = x.storage n := fun _ _ => rfl
+      rw [hstor, hstor]
+      have h3 : ∀ (w : ContractState), ((w.writeSlot 3 b0).writeSlot 4 b1).storage 3 = b0 :=
+        fun _ => by simp [ContractState.storage, ContractState.writeSlot]
+      have h4 : ∀ (w : ContractState), ((w.writeSlot 3 b0).writeSlot 4 b1).storage 4 = b1 :=
+        fun _ => by simp [ContractState.storage, ContractState.writeSlot]
+      rw [h3, h4]
+      rw [externalArgAddress_address, externalArgAddress_address, setLock_readAddrSlot]
+        at hb0r hb1r
+      exact ⟨_, _, _, _, hb0r, hb1r⟩
+    · simp at h
+  · simp at h
+
 /-- Reserve-cap invariant for `mint`: after a successful mint both reserves are below
 2^112, on the first-deposit path and on later deposits alike. -/
 theorem mint_preserves_reserve_cap (ctx : ExecutableCallContext) (recipient : Address)

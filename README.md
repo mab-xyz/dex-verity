@@ -36,6 +36,7 @@ including reentrant ones.
 | L6 | Every reserve write keeps reserves below 2^112 (L3's precondition) | `sync_/mint_/burn_preserves_reserve_cap`, `swap_k_nondecreasing` |
 | L7 | With the lock held, `swap`/`mint`/`sync` revert without effect | `swap_reverts_when_locked`, `mint_reverts_when_locked`, `sync_reverts_when_locked` |
 | L8 | A swap asking for no output reverts | `swap_reverts_without_output` |
+| L9 | After `sync`, each reserve is the value its token returned to `balanceOf(pool)`, for every token behaviour | `sync_reserves_eq_reported` |
 | F1, F4 | A created pool is registered once, under both token orders, and counted | `createPool_registers` |
 | F2 | Creating an existing pair reverts | `createPool_reverts_existing` |
 | F3 | Identical tokens revert | `createPool_reverts_identical` |
