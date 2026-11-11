@@ -173,11 +173,17 @@ conclusion of `swap_k_nondecreasing`).
   - `burn_supply_exact_iff` proves `postSupply + burned = preSupply` exactly when
     `burned ≤ preSupply`; `burn_supply_drops_nat` applies that condition. Both retain the
     callback restriction of the modular burn theorem.
-  - These bounds are explicit obligations, not a proved invariant over reachable states.
-    The reserve cap alone cannot discharge them: in the executable model, reserves `(1,1)`,
-    reported balances `(2,2)` and supply `2^255` allow a mint of `2^255` shares that wraps
-    supply to zero. `Dex/AccountingChecks.lean` checks this arbitrary-state counterexample
-    and neighboring non-overflow cases. It does not establish reachability from deployment.
+  - These bounds are explicit obligations, not invariants under arbitrary rebasing tokens.
+    **Known reachable accounting bug:** start with a deposit of `2^100` of each token.
+    Before each later mint, negatively rebase both pool balances to 1 and call `sync`.
+    Deposit enough to bring each balance to `2^100`, then `2^55`, then 2. Supply becomes
+    `2^200`, then `2^255`, then wraps to zero. All reserve caps and quotient bounds hold.
+    The original LP retains `2^256 - 1000` shares and the zero address retains 1000.
+    `Dex/RebaseOverflowChecks.lean` executes this sequence from constructor/initialization;
+    `test/unit/RebaseOverflow.t.sol` reproduces it on compiled bytecode with truthful
+    rebasing token balances and no direct pool storage writes. The negative control uses
+    the same deposits without rebases and preserves the ledger. This does not demonstrate
+    an exploit with ordinary non-rebasing tokens. Runtime overflow prevention remains open.
 
 **L4, burns are proportional and rounded in the pool's favour** (`burn_proportional_observed`,
 `burn_payout_le_observed`).
@@ -294,6 +300,12 @@ These hold whatever the factory, pool and tokens answer: the checks are in the r
 
 These are limits of the guarantees, stated so they are not mistaken for gaps in the proofs.
 
+- **Rebasing tokens can overflow the LP supply (known bug, not fixed).** With tokens whose
+  balances shrink without a transfer, repeated rebase-to-1, `sync`, deposit cycles multiply
+  the supply until it wraps around 2^256 to 0, while every reserve cap holds (see L2,
+  "Natural-number accounting"). Reproduced from deployment in
+  `Dex/RebaseOverflowChecks.lean` and `test/unit/RebaseOverflow.t.sol`. Ordinary
+  non-rebasing tokens are not shown to reach it.
 - **A lying token lies to the pool.** If a token's `balanceOf` reports funds it never
   received, the pool accepts them, as any balance-delta AMM does. L3 then still holds in
   the pool's accounting, but that accounting is only as true as the token. Pools with
