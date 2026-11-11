@@ -9,6 +9,9 @@ R1: every router entry point reverts, without effect, once the block timestamp i
 the caller's deadline — before any token moves or external call.
 R2: a successful `swapExactIn` returns at least `amountOutMin`, whatever the factory,
 pool and tokens answer.
+R3: the deposit `addLiquidity` transfers (`quoteAmounts`) never exceeds the desired
+amounts, and into a non-empty pool one amount is the desired one and the other at least its
+minimum.
 R4: a successful `removeLiquidity` returns at least the caller's minimum of each token.
 -/
 
@@ -118,5 +121,39 @@ theorem removeLiquidity_respects_mins (ctx : ExecutableCallContext)
       exact ⟨of_decide_eq_true hA, of_decide_eq_true hB⟩
     · simp at h
   · simp at h
+
+open Dex.ProofKit in
+/-- R3: `quoteAmounts` (the amounts `addLiquidity` transfers) stays within the desired
+amounts; into a non-empty pool it keeps one desired amount and meets the other minimum. -/
+theorem quoteAmounts_bounds (aD bD aM bM rA rB a b : Uint256) (s s' : ContractState)
+    (h : Router.quoteAmounts aD bD aM bM rA rB s = .success (a, b) s') :
+    a ≤ aD ∧ b ≤ bD ∧
+      ((rA != 0 || rB != 0) = true → (a = aD ∧ bM ≤ b) ∨ (aM ≤ a ∧ b = bD)) := by
+  unfold Router.quoteAmounts at h
+  dsimp only at h
+  simp only [Bind.bind, Pure.pure] at h
+  split at h
+  · rename_i hne
+    split at h
+    · rename_i hle
+      obtain ⟨_, _, hq, h⟩ := bind_success h
+      obtain ⟨hmin, -⟩ := require_success hq
+      obtain ⟨_, _, -, h⟩ := bind_success h
+      simp only [Verity.pure, ContractResult.success.injEq, Prod.mk.injEq] at h
+      obtain ⟨⟨rfl, rfl⟩, -⟩ := h
+      exact ⟨Nat.le_refl _, hle, fun _ => Or.inl ⟨rfl, of_decide_eq_true hmin⟩⟩
+    · obtain ⟨_, _, hq, h⟩ := bind_success h
+      obtain ⟨hle, -⟩ := require_success hq
+      obtain ⟨_, _, hq, h⟩ := bind_success h
+      obtain ⟨hmin, -⟩ := require_success hq
+      obtain ⟨_, _, -, h⟩ := bind_success h
+      simp only [Verity.pure, ContractResult.success.injEq, Prod.mk.injEq] at h
+      obtain ⟨⟨rfl, rfl⟩, -⟩ := h
+      exact ⟨of_decide_eq_true hle, Nat.le_refl _, fun _ => Or.inr ⟨of_decide_eq_true hmin, rfl⟩⟩
+  · rename_i hz
+    obtain ⟨_, _, -, h⟩ := bind_success h
+    simp only [Verity.pure, ContractResult.success.injEq, Prod.mk.injEq] at h
+    obtain ⟨⟨rfl, rfl⟩, -⟩ := h
+    exact ⟨Nat.le_refl _, Nat.le_refl _, fun h' => absurd h' hz⟩
 
 end Dex.RouterProofs

@@ -80,17 +80,11 @@ verity_contract Router where
       [addressToWord pool, out0, out1, addressToWord recipient]
     return amountOut
 
-  function nonreentrant(lock) addLiquidity (tokenA : Address, tokenB : Address, amountADesired : Uint256,
-      amountBDesired : Uint256, amountAMin : Uint256, amountBMin : Uint256, recipient : Address,
-      deadline : Uint256) : Uint256 := do
-    let now ← blockTimestamp
-    require (now <= deadline) "Router: EXPIRED"
-    let pool ← poolFor tokenA tokenB
-    ecmBind [r0, r1] (Compiler.Modules.Calls.withReturnsModule ["r0", "r1"] selGetReserves 0 true)
-      [addressToWord pool]
-    let aIsToken0 := addressToWord tokenA < addressToWord tokenB
-    let reserveA := if aIsToken0 then r0 else r1
-    let reserveB := if aIsToken0 then r1 else r0
+  -- The deposit for `addLiquidity`: the desired amounts into an empty pool, otherwise the
+  -- largest pair at the pool's ratio within the desired amounts and above the minimums.
+  function internal quoteAmounts (amountADesired : Uint256, amountBDesired : Uint256,
+      amountAMin : Uint256, amountBMin : Uint256, reserveA : Uint256, reserveB : Uint256) :
+      Tuple [Uint256, Uint256] := do
     let mut amountA := amountADesired
     let mut amountB := amountBDesired
     if reserveA != 0 || reserveB != 0 then
@@ -103,6 +97,21 @@ verity_contract Router where
         require (amountAOptimal <= amountADesired) "Router: INSUFFICIENT_A_AMOUNT"
         require (amountAOptimal >= amountAMin) "Router: INSUFFICIENT_A_AMOUNT"
         amountA := amountAOptimal
+    return (amountA, amountB)
+
+  function nonreentrant(lock) addLiquidity (tokenA : Address, tokenB : Address, amountADesired : Uint256,
+      amountBDesired : Uint256, amountAMin : Uint256, amountBMin : Uint256, recipient : Address,
+      deadline : Uint256) : Uint256 := do
+    let now ← blockTimestamp
+    require (now <= deadline) "Router: EXPIRED"
+    let pool ← poolFor tokenA tokenB
+    ecmBind [r0, r1] (Compiler.Modules.Calls.withReturnsModule ["r0", "r1"] selGetReserves 0 true)
+      [addressToWord pool]
+    let aIsToken0 := addressToWord tokenA < addressToWord tokenB
+    let reserveA := if aIsToken0 then r0 else r1
+    let reserveB := if aIsToken0 then r1 else r0
+    let (amountA, amountB) ← quoteAmounts amountADesired amountBDesired amountAMin amountBMin
+      reserveA reserveB
     let sender ← msgSender
     safeTransferFrom tokenA sender pool amountA
     safeTransferFrom tokenB sender pool amountB

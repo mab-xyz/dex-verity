@@ -59,6 +59,34 @@ contract RouterTest is DexBase {
         assertEq(before1 - t1.balanceOf(alice), 2e18);
     }
 
+    // R3, other branch: B is the scarce side, so A is cut to the pool price.
+    function testAddLiquidityTakesOptimalA() public {
+        _seed();
+        uint256 before0 = t0.balanceOf(alice);
+        uint256 before1 = t1.balanceOf(alice);
+        vm.prank(alice);
+        router.addLiquidity(address(t0), address(t1), 5e18, 2e18, 0, 0, alice, block.timestamp);
+        assertEq(before0 - t0.balanceOf(alice), 1e18);
+        assertEq(before1 - t1.balanceOf(alice), 2e18);
+    }
+
+    // R3 (`quoteAmounts_bounds`) on the bytecode: never more than desired, and one side is
+    // the desired amount.
+    function testFuzzAddLiquidityWithinDesired(uint256 aDesired, uint256 bDesired) public {
+        _seed();
+        aDesired = bound(aDesired, 1e9, 50e18);
+        bDesired = bound(bDesired, 1e9, 50e18);
+        uint256 before0 = t0.balanceOf(alice);
+        uint256 before1 = t1.balanceOf(alice);
+        vm.prank(alice);
+        router.addLiquidity(address(t0), address(t1), aDesired, bDesired, 0, 0, alice, block.timestamp);
+        uint256 taken0 = before0 - t0.balanceOf(alice);
+        uint256 taken1 = before1 - t1.balanceOf(alice);
+        assertLe(taken0, aDesired);
+        assertLe(taken1, bDesired);
+        assertTrue(taken0 == aDesired || taken1 == bDesired);
+    }
+
     function testAddLiquidityMinimumEnforced() public {
         _seed();
         vm.prank(alice);

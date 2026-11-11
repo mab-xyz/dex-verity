@@ -43,6 +43,7 @@ including reentrant ones.
 | F5 | The pool address is CREATE2(factory, salt, `poolCodeHash`): the deployed code hashes to `poolCodeHash` | `createPool_address` |
 | R1 | Past the deadline every router entry point reverts | `swapExactIn_/addLiquidity_/removeLiquidity_reverts_after_deadline` |
 | R2 | A successful `swapExactIn` returns at least `amountOutMin` | `swapExactIn_respects_min` |
+| R3 | `addLiquidity` never transfers more than the desired amounts; into a non-empty pool one amount is the desired one and the other meets its minimum | `quoteAmounts_bounds` (the helper computing the transferred amounts) |
 | R4 | A successful `removeLiquidity` returns at least both minimums | `removeLiquidity_respects_mins` |
 
 P1 (`isqrt` is exact) holds by construction: the pool checks `r*r ≤ n ≤ r*r + 2r` at
